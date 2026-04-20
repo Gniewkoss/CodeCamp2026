@@ -1,29 +1,28 @@
 services:
-  postgres:
-    image: postgres:15-alpine
+  api:
+    build: .
     environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: pass
-      POSTGRES_DB: repmonitor
+      # Inside the container always use the persistent volume path — the
+      # host-side DATABASE_URL from .env is ignored on purpose.
+      DATABASE_URL: sqlite:////data/repmonitor.db
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-5}
+      ANTHROPIC_MAX_TOKENS: ${ANTHROPIC_MAX_TOKENS:-1600}
+      NEWSAPI_KEY: ${NEWSAPI_KEY:-}
+      GDELT_ENABLED: ${GDELT_ENABLED:-true}
+      MAX_ARTICLES_PER_SCAN: ${MAX_ARTICLES_PER_SCAN:-25}
+      GUS_BIR_API_URL: ${GUS_BIR_API_URL:-https://wyszukiwarkaregontest.stat.gov.pl/wsBIR/UslugaBIRzewnPubl.svc}
+      GUS_BIR_API_KEY: ${GUS_BIR_API_KEY:-}
+      GUS_BIR_ENABLED: ${GUS_BIR_ENABLED:-false}
+      CEIDG_API_URL: ${CEIDG_API_URL:-https://dane.biznes.gov.pl/api/ceidg/v3}
+      CEIDG_API_TOKEN: ${CEIDG_API_TOKEN:-}
+      CEIDG_V2_API_URL: ${CEIDG_V2_API_URL:-https://dane.biznes.gov.pl/api/ceidg/v2}
+      SANCTIONS_CACHE_DIR: ${SANCTIONS_CACHE_DIR:-/data/sanctions}
     ports:
-      - "5432:5432"
+      - "8000:8000"
     volumes:
-      - repmonitor_pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U user -d repmonitor"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
+      - repmonitor_data:/data
+    restart: unless-stopped
 
 volumes:
-  repmonitor_pgdata:
+  repmonitor_data:

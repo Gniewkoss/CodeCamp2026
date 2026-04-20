@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html lang="pl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Reputation Monitor — AI due-diligence & AML</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='.9em' font-size='60'%3E%F0%9F%9B%A1%EF%B8%8F%3C/text%3E%3C/svg%3E" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              ink: {
+                950: "#070a13",
+                900: "#0b0f1a",
+                800: "#111627",
+                700: "#1a2038",
+                600: "#242b4a",
+              },
+              accent: {
+                400: "#7aa2ff",
+                500: "#5a83ff",
+                600: "#3d63e8",
+              },
+              good: "#2fd8a6",
+              warn: "#f6c768",
+              bad: "#ff6b6b",
+              crit: "#c23c70",
+            },
+            fontFamily: {
+              sans: ['"Inter"', "ui-sans-serif", "system-ui"],
+              display: ['"Space Grotesk"', "ui-sans-serif", "system-ui"],
+            },
+          },
+        },
+      };
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <script defer src="https://unpkg.com/alpinejs@3.14.1/dist/cdn.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="/static/styles.css?v=2" />
+  </head>
+  <body
+    class="min-h-screen bg-ink-950 text-slate-200 font-sans antialiased"
+    x-data="app()"
+    x-init="init()"
+  >
+    <!-- Ambient gradient backdrop -->
+    <div
+      aria-hidden="true"
+      class="pointer-events-none fixed inset-0 -z-10 overflow-hidden"
+    >
+      <div class="absolute -top-40 -left-40 h-[34rem] w-[34rem] rounded-full bg-accent-600/25 blur-[140px]"></div>
+      <div class="absolute top-1/2 -right-40 h-[30rem] w-[30rem] rounded-full bg-crit/20 blur-[140px]"></div>
+      <div class="absolute bottom-0 left-1/3 h-[26rem] w-[26rem] rounded-full bg-good/10 blur-[140px]"></div>
+      <div class="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(7,10,19,0.9)_80%)]"></div>
+    </div>
+
+    <!-- Top bar -->
+    <header class="sticky top-0 z-40 border-b border-white/5 bg-ink-950/70 backdrop-blur-xl">
+      <div class="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+        <div class="flex items-center gap-3">
+          <div class="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-accent-500 to-crit shadow-lg shadow-accent-600/40">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+          </div>
+          <div>
+            <p class="font-display text-lg font-semibold tracking-tight text-white">Reputation Monitor</p>
+            <p class="text-[11px] uppercase tracking-[0.2em] text-slate-400">AI · AML · Due-diligence</p>
+          </div>
+        </div>
+        <nav class="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 p-1">
+          <template x-for="tab in tabs" :key="tab.id">
+            <button
+              @click="goto(tab.id)"
+              :class="view === tab.id ? 'bg-accent-600/90 text-white shadow-lg shadow-accent-600/30' : 'text-slate-300 hover:text-white'"
+              class="flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-medium transition-all"
+            >
+              <span x-text="tab.icon"></span>
+              <span x-text="tab.label"></span>
+            </button>
+          </template>
+        </nav>
+        <button
+          @click="showAdd = true"
+          class="hidden md:flex items-center gap-2 rounded-full bg-gradient-to-r from-accent-500 to-accent-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-accent-600/30 transition hover:brightness-110"
+        >
+          <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+          Dodaj spółkę
+        </button>
+      </div>
+    </header>
+
+    <main class="mx-auto max-w-7xl px-6 pb-24 pt-8">
+      <!-- ───────────────────────── Overview ───────────────────────── -->
+      <section x-show="view === 'overview'" x-transition>
+        <!-- Hero quick-lookup -->
+        <div class="card relative mb-10 overflow-hidden p-8">
+          <div aria-hidden="true" class="pointer-events-none absolute inset-0 -z-10 opacity-70">
+            <div class="absolute -top-20 -left-20 h-72 w-72 rounded-full bg-accent-600/30 blur-[100px]"></div>
+            <div class="absolute -bottom-16 right-0 h-64 w-64 rounded-full bg-crit/30 blur-[100px]"></div>
+          </div>
+          <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+            <div class="max-w-xl">
+              <p class="text-xs font-semibold uppercase tracking-[0.25em] text-accent-400">Instant AI due-diligence</p>
+              <h1 class="mt-2 font-display text-4xl font-bold tracking-tight text-white">Sprawdź dowolną polską spółkę</h1>
+              <p class="mt-3 text-slate-300">
+                Wpisz <b>NIP</b>, <b>REGON</b> lub <b>nazwę</b> — pobierzemy dane z białej listy MF, zeskanujemy media,
+                ocenimy wiarygodność artykułów i pokażemy <b class="text-white">plusy i minusy</b>
+                oraz rekomendację inwestycyjną.
+              </p>
+            </div>
+            <form @submit.prevent="quickLookup" class="w-full max-w-lg">
+              <div class="flex overflow-hidden rounded-full border border-white/15 bg-ink-900/80 shadow-lg shadow-black/30 focus-within:border-accent-500">
+                <div class="grid w-11 place-items-center text-slate-400">
+                  <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16z"/></svg>
+                </div>
+                <input
+                  type="text"
+                  x-model="lookup.query"
+                  placeholder="np. PKN Orlen · NIP 7740001454 · KRS 0000327813"
+                  class="flex-1 bg-transparent py-3 text-white placeholder:text-slate-500 focus:outline-none"
+                  :disabled="lookup.running"
+                />
+                <button
+                  type="submit"
+                  :disabled="lookup.running || !lookup.query.trim()"
+                  class="bg-gradient-to-r from-accent-500 to-crit px-6 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
+                >
+                  <span x-text="lookup.running ? 'Analizuję…' : 'Analizuj'"></span>
+                </button>
+              </div>
+              <p class="mt-2 px-3 text-xs text-slate-400">
+                <span x-show="!lookup.status">Obsługujemy NIP (10 cyfr), REGON (9/14), KRS (z prefiksem np. "KRS 327813" lub zerami wiodącymi "0000327813") oraz nazwy firm.</span>
+                <span x-show="lookup.status" x-text="lookup.status" :class="lookup.error ? 'text-crit' : 'text-accent-400'"></span>
+              </p>
+            </form>
+          </div>
+        </div>
+
+        <div class="mb-10 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h2 class="font-display text-2xl font-bold tracking-tight text-white">Panel ryzyka</h2>
+            <p class="mt-1 text-slate-400">Twoje monitorowane spółki — bieżący obraz ryzyka w oparciu o analizę medialną AI.</p>
+          </div>
+          <div class="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-300">
+            <span class="relative flex h-2 w-2">
+              <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-good opacity-75"></span>
+              <span class="relative inline-flex h-2 w-2 rounded-full bg-good"></span>
+            </span>
+            Live · odświeżono <span x-text="lastRefreshLabel"></span>
+          </div>
+        </div>
+
+        <!-- KPI cards -->
+        <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <template x-for="kpi in kpis" :key="kpi.label">
+            <div class="card p-5">
+              <div class="flex items-center justify-between">
+                <p class="text-xs uppercase tracking-widest text-slate-400" x-text="kpi.label"></p>
+                <span class="text-lg" x-text="kpi.icon"></span>
+              </div>
+              <p class="mt-3 font-display text-3xl font-semibold text-white" x-text="kpi.value"></p>
+              <p class="mt-1 text-xs text-slate-400" x-text="kpi.sub"></p>
+            </div>
+          </template>
+        </div>
+
+        <!-- Charts row -->
+        <div class="mt-8 grid gap-5 lg:grid-cols-5">
+          <div class="card p-6 lg:col-span-3">
+            <div class="mb-4 flex items-center justify-between">
+              <div>
+                <h3 class="font-display text-lg font-semibold text-white">Top 10 — najwyższe ryzyko</h3>
+                <p class="text-xs text-slate-400">Reputational vs. investment risk (niżej = lepiej)</p>
+              </div>
+            </div>
+            <canvas id="topRisksChart" class="!h-80"></canvas>
+          </div>
+
+          <div class="card p-6 lg:col-span-2">
+            <h3 class="font-display text-lg font-semibold text-white">Kategorie ryzyka</h3>
+            <p class="text-xs text-slate-400">Udział wg analizowanych artykułów</p>
+            <canvas id="categoriesChart" class="!h-72 mt-4"></canvas>
+          </div>
+        </div>
+
+        <!-- High-risk articles -->
+        <div class="mt-8 card p-6">
+          <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 class="font-display text-lg font-semibold text-white">Ostatnie artykuły wysokiego ryzyka</h3>
+              <p class="text-xs text-slate-400">Ostatnie 72h · severity ≥ 5 · źródła PL/UE + NewsAPI + GDELT</p>
+            </div>
+          </div>
+          <div class="overflow-hidden rounded-xl border border-white/5">
+            <table class="w-full text-sm">
+              <thead class="bg-white/5 text-[11px] uppercase tracking-widest text-slate-400">
+                <tr>
+                  <th class="px-4 py-3 text-left">Spółka</th>
+                  <th class="px-4 py-3 text-left">Tytuł</th>
+                  <th class="px-4 py-3 text-left">Kategoria</th>
+                  <th class="px-4 py-3 text-left">Severity</th>
+                  <th class="px-4 py-3 text-left">Źródło</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-white/5">
+                <template x-for="row in highRisk" :key="row.article_id">
+                  <tr class="hover:bg-white/5 cursor-pointer" @click="openCompany(row.company_id)">
+                    <td class="px-4 py-3 font-medium text-white" x-text="row.company_name"></td>
+                    <td class="px-4 py-3 text-slate-300 max-w-[24rem] truncate" x-text="row.title || row.url"></td>
+                    <td class="px-4 py-3"><span class="badge-cat" x-text="prettyCategory(row.risk_category) || '—'"></span></td>
+                    <td class="px-4 py-3"><span :class="severityPill(row.severity)" x-text="row.severity?.toFixed(1) ?? '—'"></span></td>
+                    <td class="px-4 py-3 text-slate-400" x-text="row.source || '—'"></td>
+                  </tr>
+                </template>
+                <tr x-show="highRisk.length === 0">
+                  <td colspan="5" class="px-4 py-6 text-center text-slate-500">
+                    Brak artykułów spełniających próg. Uruchom skan spółki lub zmniejsz filtr.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ───────────────────────── Companies ───────────────────────── -->
+      <section x-show="view === 'companies'" x-transition>
+        <div class="mb-6 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 class="font-display text-4xl font-bold tracking-tight text-white">Rejestr spółek</h1>
+            <p class="mt-2 text-slate-400">Pełna nazwa, aliasy, NIP, KRS, ticker, sektor — wszystko w jednym miejscu.</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <div class="relative">
+              <svg class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16z"/></svg>
+              <input
+                type="text"
+                x-model.debounce.300ms="searchQuery"
+                @input="runSearch"
+                placeholder="Nazwa, NIP lub ticker…"
+                class="w-72 rounded-full border border-white/10 bg-white/5 py-2 pl-9 pr-4 text-sm text-white placeholder:text-slate-500 focus:border-accent-500 focus:outline-none"
+              />
+            </div>
+            <button
+              @click="showAdd = true"
+              class="rounded-full bg-gradient-to-r from-accent-500 to-accent-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-accent-600/30"
+            >+ Dodaj</button>
+          </div>
+        </div>
+
+        <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <template x-for="c in filteredCompanies" :key="c.id">
+            <div
+              class="card group cursor-pointer p-5 transition hover:-translate-y-0.5 hover:border-accent-500/40"
+              @click="openCompany(c.id)"
+            >
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <p class="font-display text-lg font-semibold text-white truncate" x-text="c.name"></p>
+                  <p class="mt-1 text-xs text-slate-400 flex flex-wrap items-center gap-2">
+                    <span x-text="c.sector || 'Sektor: —'"></span>
+                    <span x-show="c.ticker" class="rounded bg-white/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-slate-300" x-text="c.ticker"></span>
+                    <span :class="analysisStatusClass(c)" x-text="analysisStatusLabel(c)"></span>
+                    <span x-show="c.confidence" :class="confidenceClass(c)" x-text="confidenceLabel(c)"></span>
+                  </p>
+                </div>
+                <div class="text-right flex-shrink-0">
+                  <span :class="recBadge(c.recommendation)" x-text="c.recommendation || '—'"></span>
+                </div>
+              </div>
+
+              <div class="mt-4 flex items-end gap-4">
+                <div class="flex-1">
+                  <p class="text-[10px] uppercase tracking-widest text-slate-500">Ryzyko (unified)</p>
+                  <div class="flex items-baseline gap-1">
+                    <span class="font-display text-3xl font-bold" :style="`color: ${scoreColor(c.current_score)}`" x-text="c.current_score == null ? '—' : fmt(c.current_score)"></span>
+                    <span class="text-xs text-slate-500">/100</span>
+                  </div>
+                  <div class="mt-1 h-1.5 overflow-hidden rounded-full bg-white/5">
+                    <div class="h-full rounded-full transition-all" :style="`width: ${Math.min(100, c.current_score ?? 0)}%; background: ${scoreColor(c.current_score)}`"></div>
+                  </div>
+                </div>
+              </div>
+
+              <p x-show="c.rationale && c.rationale.length" class="mt-3 line-clamp-2 text-xs text-slate-300" x-text="(c.rationale && c.rationale[0]) || ''"></p>
+
+              <div class="mt-3 flex items-center justify-between text-xs text-slate-400">
+                <span x-text="`${c.article_count} artykułów · ${c.analyzed_count} analizowanych`"></span>
+                <span class="opacity-0 transition group-hover:opacity-100">Otwórz →</span>
+              </div>
+            </div>
+          </template>
+          <div x-show="filteredCompanies.length === 0" class="col-span-full rounded-2xl border border-dashed border-white/10 p-12 text-center text-slate-500">
+            Brak spółek. Kliknij <b class="text-white">+ Dodaj</b>, aby rozpocząć.
+          </div>
+        </div>
+      </section>
+
+      <!-- ───────────────────────── Risk ledger (registry + events) ───────────────────────── -->
+      <section x-show="view === 'ledger'" x-transition class="space-y-6">
+        <div class="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 class="font-display text-4xl font-bold tracking-tight text-white">Ledger ryzyka</h1>
+            <p class="mt-2 text-slate-400">Łączy scoring artykułów, zdarzenia ryzyka, sankcje (EU/OFAC/UN/PL) i dane KRS/CEIDG.</p>
+          </div>
+          <button @click="loadLedger()" class="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-200 hover:bg-white/10">Odśwież</button>
+        </div>
+
+        <div class="grid gap-6 lg:grid-cols-5">
+          <div class="card overflow-hidden lg:col-span-2">
+            <div class="border-b border-white/10 px-4 py-3">
+              <p class="text-xs font-semibold uppercase tracking-widest text-slate-500">Spółki</p>
+            </div>
+            <div class="max-h-[70vh] overflow-y-auto">
+              <table class="w-full text-left text-sm">
+                <thead class="sticky top-0 bg-ink-900/95 text-[10px] uppercase tracking-wider text-slate-500">
+                  <tr>
+                    <th class="px-3 py-2">Ryzyko</th>
+                    <th class="px-3 py-2">Nazwa</th>
+                    <th class="px-3 py-2">NIP</th>
+                    <th class="px-3 py-2 text-center">Sankcje</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="row in ledgerRows" :key="row.id">
+                    <tr
+                      @click="openLedgerCompany(row.id)"
+                      class="cursor-pointer border-t border-white/5 transition hover:bg-white/5"
+                      :class="ledgerDetail?.company?.id === row.id ? 'bg-accent-500/10' : ''"
+                    >
+                      <td class="px-3 py-2 whitespace-nowrap">
+                        <span x-text="ledgerRiskBadge(row.ledger_score)"></span>
+                        <span class="ml-1 font-mono text-white" x-text="row.ledger_score?.toFixed(1) ?? '—'"></span>
+                      </td>
+                      <td class="px-3 py-2 text-white" x-text="row.name"></td>
+                      <td class="px-3 py-2 font-mono text-slate-400" x-text="row.nip || '—'"></td>
+                      <td class="px-3 py-2 text-center text-lg" x-text="row.sanctions_flag ? '⚠️' : '✓'"></td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+              <p x-show="!ledgerRows.length" class="p-6 text-center text-slate-500">Brak danych — dodaj spółki i uruchom skan.</p>
+            </div>
+          </div>
+
+          <div class="card p-6 lg:col-span-3 min-h-[320px]">
+            <template x-if="ledgerLoading">
+              <p class="text-slate-400">Ładowanie…</p>
+            </template>
+            <template x-if="!ledgerLoading && !ledgerDetail">
+              <p class="text-slate-500">Wybierz spółkę z listy po lewej.</p>
+            </template>
+            <template x-if="ledgerDetail">
+              <div class="space-y-5">
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h2 class="font-display text-2xl font-bold text-white" x-text="ledgerDetail.company.name"></h2>
+                    <p class="mt-1 text-sm text-slate-400">
+                      NIP: <span class="font-mono text-slate-300" x-text="ledgerDetail.company.nip || '—'"></span>
+                      · KRS: <span class="font-mono text-slate-300" x-text="ledgerDetail.company.krs || '—'"></span>
+                    </p>
+                  </div>
+                  <div class="text-right">
+                    <p class="text-[10px] uppercase tracking-widest text-slate-500">Ledger score</p>
+                    <p class="font-display text-4xl font-bold" :style="`color: ${scoreColor(ledgerDetail.ledger?.score)}`" x-text="ledgerDetail.ledger?.score?.toFixed(1)"></p>
+                    <p class="text-xs text-slate-500">Aktywne zdarzenia: <span x-text="ledgerDetail.ledger?.active_events"></span></p>
+                  </div>
+                </div>
+
+                <div class="flex flex-wrap gap-2">
+                  <button @click="ledgerRefreshRegistry(ledgerDetail.company.id)" class="rounded-full bg-white/10 px-3 py-1.5 text-xs text-white hover:bg-white/15">Odśwież KRS/CEIDG</button>
+                  <button @click="ledgerRecheckSanctions(ledgerDetail.company.id)" class="rounded-full bg-crit/30 px-3 py-1.5 text-xs text-white hover:bg-crit/40">Sankcje: sprawdź</button>
+                  <button @click="openCompany(ledgerDetail.company.id)" class="rounded-full border border-accent-500/40 px-3 py-1.5 text-xs text-accent-400">Pełny profil spółki →</button>
+                </div>
+
+                <div x-show="ledgerDetail.score_timeline?.length" class="card-inner p-4">
+                  <p class="mb-2 text-[10px] font-semibold uppercase tracking-widest text-slate-500">Timeline wyniku (historia snapshotów)</p>
+                  <canvas id="ledger-score-chart" height="120"></canvas>
+                </div>
+
+                <div class="grid gap-4 md:grid-cols-2">
+                  <div class="card-inner p-4">
+                    <p class="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Zarząd / osoby</p>
+                    <ul class="mt-2 space-y-1 text-sm text-slate-300">
+                      <template x-for="p in (ledgerDetail.persons || [])" :key="p.id">
+                        <li><span class="text-white" x-text="p.full_name"></span> — <span class="text-slate-500" x-text="p.role"></span></li>
+                      </template>
+                      <li x-show="!(ledgerDetail.persons || []).length" class="text-slate-500">Brak — odśwież KRS.</li>
+                    </ul>
+                  </div>
+                  <div class="card-inner p-4">
+                    <p class="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Ostatnie wpisy rejestru</p>
+                    <ul class="mt-2 space-y-1 text-xs text-slate-400">
+                      <template x-for="r in (ledgerDetail.registry_snapshots || [])" :key="r.id">
+                        <li><span class="text-accent-400" x-text="r.source"></span> · <span x-text="r.extracted_at?.slice(0,19)"></span></li>
+                      </template>
+                    </ul>
+                  </div>
+                </div>
+
+                <div>
+                  <p class="mb-2 text-[10px] font-semibold uppercase tracking-widest text-slate-500">Dziennik zdarzeń</p>
+                  <div class="max-h-80 space-y-2 overflow-y-auto pr-1">
+                    <template x-for="ev in (ledgerDetail.events || [])" :key="ev.id">
+                      <div
+                        class="rounded-xl border border-white/10 p-3 text-sm"
+                        :class="ev.status === 'active' ? 'bg-crit/5 border-crit/20' : (ev.status === 'resolved' ? 'bg-good/5 border-good/20' : 'bg-white/5')"
+                      >
+                        <div class="flex flex-wrap items-center gap-2">
+                          <span class="rounded bg-white/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-slate-300" x-text="ev.event_type"></span>
+                          <span class="text-[10px] text-slate-500" x-text="ev.status"></span>
+                          <span class="ml-auto text-xs text-warn" x-text="ev.risk_contribution != null ? ('+' + ev.risk_contribution + ' pkt') : ''"></span>
+                        </div>
+                        <p class="mt-1 font-medium text-white" x-text="ev.title"></p>
+                        <p class="mt-1 text-xs text-slate-400" x-show="ev.description" x-text="ev.description"></p>
+                        <div class="mt-2 flex flex-wrap gap-2">
+                          <a x-show="ev.source_url" :href="ev.source_url" target="_blank" class="text-[10px] text-accent-400 hover:underline">Źródło</a>
+                          <button
+                            x-show="ev.status === 'active'"
+                            @click="ledgerResolveEvent(ledgerDetail.company.id, ev.id)"
+                            class="text-[10px] text-slate-400 hover:text-white"
+                          >Oznacz jako rozwiązane</button>
+                        </div>
+                      </div>
+                    </template>
+                    <p x-show="!(ledgerDetail.events || []).length" class="text-slate-500">Brak zdarzeń.</p>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </section>
+
+      <!-- ───────────────────────── Company detail ───────────────────────── -->
+      <section x-show="view === 'company'" x-transition class="space-y-6">
+        <button @click="goto('companies')" class="text-sm text-slate-400 transition hover:text-white">← Wróć do listy</button>
+
+        <template x-if="selected">
+          <div class="space-y-6">
+            <!-- Header card -->
+            <div class="card relative overflow-hidden p-6">
+              <div class="absolute inset-0 -z-10 opacity-60" :style="`background: radial-gradient(circle at 20% 0%, ${scoreColor(selected.current_score)}33, transparent 60%)`"></div>
+              <div class="flex flex-wrap items-start justify-between gap-6">
+                <div>
+                  <div class="flex items-center gap-3">
+                    <h1 class="font-display text-3xl font-bold tracking-tight text-white" x-text="selected.name"></h1>
+                    <span x-show="selected.ticker" class="rounded bg-white/10 px-2 py-0.5 text-xs uppercase tracking-wider text-slate-300" x-text="selected.ticker"></span>
+                  </div>
+                  <p class="mt-2 text-sm text-slate-400">
+                    <span x-show="selected.sector" x-text="selected.sector"></span>
+                    <span x-show="selected.nip">  ·  NIP: <b class="text-slate-300" x-text="selected.nip"></b></span>
+                    <span x-show="selected.regon">  ·  REGON: <b class="text-slate-300" x-text="selected.regon"></b></span>
+                    <span x-show="selected.krs">  ·  KRS: <b class="text-slate-300" x-text="selected.krs"></b></span>
+                  </p>
+                  <p class="mt-1 text-xs text-slate-500">
+                    <span x-show="selected.address"><svg class="inline h-3 w-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path stroke-linecap="round" stroke-linejoin="round" d="M19 11c0 7-7 11-7 11s-7-4-7-11a7 7 0 0 1 14 0z"/></svg> <span x-text="selected.address"></span></span>
+                    <span x-show="selected.status_vat" class="ml-2">Status VAT: <b :class="selected.status_vat === 'Czynny' ? 'text-good' : 'text-warn'" x-text="selected.status_vat"></b></span>
+                    <span x-show="selected.legal_form" class="ml-2">Forma: <b class="text-slate-300" x-text="selected.legal_form"></b></span>
+                    <span x-show="selected.pkd_primary" class="ml-2">PKD: <b class="text-slate-300" x-text="selected.pkd_primary + (selected.pkd_primary_label ? ' · ' + selected.pkd_primary_label : '')"></b></span>
+                  </p>
+                  <div class="mt-3 flex flex-wrap items-center gap-1.5">
+                    <template x-for="s in (selected.registry_sources || [])" :key="s">
+                      <span class="inline-flex items-center gap-1 rounded-full border border-accent-500/30 bg-accent-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-accent-400" :title="registrySourceLabel(s)">
+                        <svg class="h-2.5 w-2.5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l2 4 4 .5-3 3 .8 4.5L12 12l-3.8 2 .8-4.5-3-3 4-.5 2-4z"/></svg>
+                        <span x-text="registrySourceShort(s)"></span>
+                      </span>
+                    </template>
+                    <template x-for="a in (selected.aliases || [])" :key="a">
+                      <span class="rounded-full bg-white/5 px-2 py-0.5 text-xs text-slate-300" x-text="a"></span>
+                    </template>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button
+                    @click="startScan"
+                    :disabled="scanning"
+                    class="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-accent-500 to-accent-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-accent-600/30 transition hover:brightness-110 disabled:opacity-60"
+                  >
+                    <template x-if="!scanning">
+                      <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582M19.419 19A8 8 0 0 1 5.582 9M20 20v-5h-.582"/></svg>
+                    </template>
+                    <template x-if="scanning">
+                      <svg class="h-4 w-4 animate-spin" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 2a10 10 0 0 1 10 10" /></svg>
+                    </template>
+                    <span x-text="scanning ? 'Skanowanie…' : 'Uruchom skan AI'"></span>
+                  </button>
+                  <button
+                    @click="deleteCompany"
+                    class="rounded-full border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/10"
+                    title="Usuń"
+                  >Usuń</button>
+                </div>
+              </div>
+
+              <!-- Insufficient evidence banner -->
+              <div x-show="isInsufficient(selected)" class="mt-6 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-5">
+                <div class="flex items-start gap-3">
+                  <div class="text-2xl">⚠️</div>
+                  <div class="flex-1">
+                    <p class="font-display text-lg font-semibold text-amber-200">Niewystarczające dowody</p>
+                    <p class="mt-1 text-sm text-amber-100/80">
+                      Skan nie znalazł wiarygodnych artykułów powiązanych ze spółką. <b>Nie wyciągamy żadnej rekomendacji z tak małej próby.</b>
+                      Dodaj aliasy (np. pełną nazwę prawną, skróty, nazwy produktów) i uruchom skan ponownie.
+                    </p>
+                    <ul class="mt-2 list-disc space-y-1 pl-5 text-xs text-amber-100/70">
+                      <template x-for="r in (selected.rationale || [])" :key="r">
+                        <li x-text="r"></li>
+                      </template>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Scores row -->
+              <div class="mt-8 grid gap-4 md:grid-cols-3">
+                <!-- Unified risk score -->
+                <div class="card-inner p-5">
+                  <p class="text-xs uppercase tracking-widest text-slate-400">Ryzyko (unified)</p>
+                  <div class="mt-2 flex items-baseline gap-2">
+                    <span class="font-display text-5xl font-bold" :style="`color: ${scoreColor(selected.current_score)}`" x-text="selected.current_score == null ? '—' : fmt(selected.current_score)"></span>
+                    <span class="text-sm text-slate-500">/100</span>
+                  </div>
+                  <div class="mt-3 h-2 overflow-hidden rounded-full bg-white/5">
+                    <div class="h-full rounded-full" :style="`width: ${Math.min(100, selected.current_score ?? 0)}%; background: ${scoreColor(selected.current_score)}`"></div>
+                  </div>
+                  <p class="mt-2 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                    <span :class="analysisStatusClass(selected)" x-text="analysisStatusLabel(selected)"></span>
+                    <span x-show="selected.confidence" :class="confidenceClass(selected)" x-text="confidenceLabel(selected)"></span>
+                  </p>
+                </div>
+
+                <!-- Recommendation -->
+                <div class="card-inner p-5 md:col-span-2">
+                  <p class="text-xs uppercase tracking-widest text-slate-400">Rekomendacja AI (spójna z ryzykiem)</p>
+                  <div class="mt-2 flex items-center gap-3">
+                    <span :class="recBadgeLarge(selected.recommendation)" x-text="selected.recommendation || '—'"></span>
+                    <span class="font-display text-2xl font-semibold text-white" x-text="recommendationHeadline(selected.recommendation)"></span>
+                  </div>
+                  <p class="mt-2 text-sm text-slate-300" x-text="selected.recommendation_description || 'Brak wystarczających danych — uruchom skan.'"></p>
+                  <p class="mt-2 text-xs text-slate-500">
+                    <span x-text="`${selected.article_count} artykułów · ${selected.analyzed_count} analizowanych AI`"></span>
+                    <span x-show="selected.signals"> · <span x-text="`${selected.signals?.evidence_count ?? 0} wiarygodnych dowodów`"></span></span>
+                    <span x-show="selected.last_scan_at"> · ostatni skan: <b x-text="fmtDate(selected.last_scan_at)"></b></span>
+                  </p>
+                </div>
+              </div>
+
+              <!-- Verdict card — single source of truth -->
+              <div x-show="hasVerdict(selected) && !isInsufficient(selected)" class="mt-6 card-inner p-6">
+                <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+                  <h3 class="font-display text-lg font-semibold text-white">Werdykt AI — dlaczego taka ocena</h3>
+                  <div class="flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-widest text-slate-500">
+                    <span x-show="selected.signals" x-text="`negatywne: ${Math.round((selected.signals?.negative_ratio ?? 0) * 100)}%`"></span>
+                    <span x-show="selected.signals" x-text="`avg severity: ${(selected.signals?.avg_severity ?? 0).toFixed(1)}/10`"></span>
+                    <span x-show="selected.signals?.sanctions_active" class="text-danger">sankcje aktywne</span>
+                  </div>
+                </div>
+
+                <div class="grid gap-5 md:grid-cols-3">
+                  <div class="md:col-span-3">
+                    <p class="text-[10px] uppercase tracking-widest text-slate-500">Uzasadnienie</p>
+                    <ul class="mt-1 space-y-1.5 text-sm text-slate-200">
+                      <template x-for="r in (selected.rationale || [])" :key="r">
+                        <li class="flex gap-2"><span class="text-accent-400">›</span><span x-text="r"></span></li>
+                      </template>
+                      <li x-show="!(selected.rationale || []).length" class="text-slate-500">Model nie zwrócił dodatkowych komentarzy.</li>
+                    </ul>
+                  </div>
+
+                  <div>
+                    <p class="text-[10px] uppercase tracking-widest text-red-400/80">Kluczowe obawy</p>
+                    <ul class="mt-1 space-y-1 text-sm text-rose-100">
+                      <template x-for="k in (selected.key_concerns || [])" :key="k">
+                        <li class="flex gap-2"><span class="text-rose-400">▼</span><span x-text="k"></span></li>
+                      </template>
+                      <li x-show="!(selected.key_concerns || []).length" class="text-slate-500">—</li>
+                    </ul>
+                  </div>
+
+                  <div>
+                    <p class="text-[10px] uppercase tracking-widest text-emerald-400/80">Pozytywy</p>
+                    <ul class="mt-1 space-y-1 text-sm text-emerald-100">
+                      <template x-for="k in (selected.key_positives || [])" :key="k">
+                        <li class="flex gap-2"><span class="text-emerald-400">▲</span><span x-text="k"></span></li>
+                      </template>
+                      <li x-show="!(selected.key_positives || []).length" class="text-slate-500">—</li>
+                    </ul>
+                  </div>
+
+                  <div x-show="(selected.overrides || []).length">
+                    <p class="text-[10px] uppercase tracking-widest text-amber-400/80">Reguły wymuszone (audyt)</p>
+                    <ul class="mt-1 space-y-1 text-xs text-amber-200/80">
+                      <template x-for="o in (selected.overrides || [])" :key="o">
+                        <li class="flex gap-2"><span>⚙</span><span x-text="o"></span></li>
+                      </template>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Registry data (MF white-list / GUS BIR / CEIDG) -->
+            <div class="card p-6" x-show="hasRegistryData(selected)">
+              <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 class="font-display text-lg font-semibold text-white">Dane z rejestrów</h3>
+                  <p class="text-xs text-slate-400">Źródła: <span x-text="(selected.registry_sources || []).map(registrySourceLabel).join(' · ') || '—'"></span></p>
+                </div>
+              </div>
+              <dl class="grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+                <div x-show="selected.nip">
+                  <dt class="text-[10px] uppercase tracking-widest text-slate-500">NIP</dt>
+                  <dd class="font-mono text-slate-100" x-text="selected.nip"></dd>
+                </div>
+                <div x-show="selected.regon">
+                  <dt class="text-[10px] uppercase tracking-widest text-slate-500">REGON</dt>
+                  <dd class="font-mono text-slate-100" x-text="selected.regon"></dd>
+                </div>
+                <div x-show="selected.krs">
+                  <dt class="text-[10px] uppercase tracking-widest text-slate-500">KRS</dt>
+                  <dd class="font-mono text-slate-100" x-text="selected.krs"></dd>
+                </div>
+                <div x-show="selected.legal_form">
+                  <dt class="text-[10px] uppercase tracking-widest text-slate-500">Forma prawna</dt>
+                  <dd class="text-slate-100" x-text="selected.legal_form"></dd>
+                </div>
+                <div x-show="selected.status_vat">
+                  <dt class="text-[10px] uppercase tracking-widest text-slate-500">Status VAT</dt>
+                  <dd><b :class="selected.status_vat === 'Czynny' ? 'text-good' : 'text-warn'" x-text="selected.status_vat"></b></dd>
+                </div>
+                <div x-show="selected.registration_date">
+                  <dt class="text-[10px] uppercase tracking-widest text-slate-500">Data rejestracji</dt>
+                  <dd class="text-slate-100" x-text="selected.registration_date"></dd>
+                </div>
+                <div x-show="selected.address" class="sm:col-span-2 lg:col-span-3">
+                  <dt class="text-[10px] uppercase tracking-widest text-slate-500">Adres</dt>
+                  <dd class="text-slate-100" x-text="selected.address"></dd>
+                </div>
+              </dl>
+
+              <div x-show="(selected.pkd_all || []).length" class="mt-5">
+                <p class="text-[10px] font-semibold uppercase tracking-widest text-slate-500">PKD — działalność</p>
+                <div class="mt-2 flex flex-wrap gap-1.5">
+                  <template x-for="p in (selected.pkd_all || [])" :key="p.code">
+                    <span
+                      class="inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs"
+                      :class="p.primary ? 'border-accent-500/50 bg-accent-500/10 text-accent-400 font-semibold' : 'border-white/10 bg-white/5 text-slate-300'"
+                      :title="p.label || ''"
+                    >
+                      <span class="font-mono" x-text="p.code"></span>
+                      <span x-show="p.primary" class="text-[9px] uppercase tracking-wider">główne</span>
+                      <span x-show="p.label" class="truncate max-w-[16rem]" x-text="'· ' + p.label"></span>
+                    </span>
+                  </template>
+                </div>
+              </div>
+            </div>
+
+            <!-- AI SWOT / investment thesis -->
+            <div class="card p-6" x-show="hasInsights(selected)">
+              <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 class="font-display text-lg font-semibold text-white">Synteza AI — plusy, minusy i teza inwestycyjna</h3>
+                  <p class="text-xs text-slate-400">
+                    Claude agreguje wszystkie artykuły, <b class="text-white">odfiltrowując niewiarygodne źródła</b>, i buduje pełny obraz.
+                    <span x-show="selected.insights_generated_at" class="text-slate-500"> · aktualizacja: <span x-text="fmtDate(selected.insights_generated_at)"></span></span>
+                  </p>
+                </div>
+                <button
+                  @click="regenerateInsights"
+                  :disabled="synthing"
+                  class="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-200 transition hover:bg-white/10 disabled:opacity-60"
+                  x-text="synthing ? 'Generuję…' : 'Regeneruj AI'"
+                ></button>
+              </div>
+
+              <div x-show="selected.ai_summary" class="mb-5 rounded-xl border border-accent-500/20 bg-accent-500/5 p-4 text-sm leading-relaxed text-slate-200">
+                <p class="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-accent-400">Streszczenie sytuacji</p>
+                <p x-text="selected.ai_summary"></p>
+              </div>
+
+              <div class="grid gap-4 md:grid-cols-2">
+                <div class="rounded-xl border border-good/25 bg-good/5 p-4">
+                  <div class="mb-3 flex items-center gap-2">
+                    <span class="grid h-7 w-7 place-items-center rounded-full bg-good/20 text-good">+</span>
+                    <p class="font-display text-sm font-semibold uppercase tracking-widest text-good">Mocne strony</p>
+                  </div>
+                  <ul class="space-y-2 text-sm text-slate-200">
+                    <template x-for="s in (selected.strengths || [])" :key="s">
+                      <li class="flex gap-2"><span class="text-good">✓</span><span x-text="s"></span></li>
+                    </template>
+                    <li x-show="!(selected.strengths || []).length" class="text-slate-500">Brak zidentyfikowanych mocnych stron.</li>
+                  </ul>
+                </div>
+
+                <div class="rounded-xl border border-bad/25 bg-bad/5 p-4">
+                  <div class="mb-3 flex items-center gap-2">
+                    <span class="grid h-7 w-7 place-items-center rounded-full bg-bad/20 text-bad">−</span>
+                    <p class="font-display text-sm font-semibold uppercase tracking-widest text-bad">Słabe strony</p>
+                  </div>
+                  <ul class="space-y-2 text-sm text-slate-200">
+                    <template x-for="w in (selected.weaknesses || [])" :key="w">
+                      <li class="flex gap-2"><span class="text-bad">✗</span><span x-text="w"></span></li>
+                    </template>
+                    <li x-show="!(selected.weaknesses || []).length" class="text-slate-500">Brak zidentyfikowanych słabych stron.</li>
+                  </ul>
+                </div>
+
+                <div class="rounded-xl border border-accent-500/25 bg-accent-500/5 p-4">
+                  <div class="mb-3 flex items-center gap-2">
+                    <span class="grid h-7 w-7 place-items-center rounded-full bg-accent-500/20 text-accent-400">▲</span>
+                    <p class="font-display text-sm font-semibold uppercase tracking-widest text-accent-400">Szanse</p>
+                  </div>
+                  <ul class="space-y-2 text-sm text-slate-200">
+                    <template x-for="o in (selected.opportunities || [])" :key="o">
+                      <li class="flex gap-2"><span class="text-accent-400">↑</span><span x-text="o"></span></li>
+                    </template>
+                    <li x-show="!(selected.opportunities || []).length" class="text-slate-500">Brak zidentyfikowanych szans.</li>
+                  </ul>
+                </div>
+
+                <div class="rounded-xl border border-crit/25 bg-crit/5 p-4">
+                  <div class="mb-3 flex items-center gap-2">
+                    <span class="grid h-7 w-7 place-items-center rounded-full bg-crit/20" style="color:#ff9ebc">▼</span>
+                    <p class="font-display text-sm font-semibold uppercase tracking-widest" style="color:#ff9ebc">Zagrożenia</p>
+                  </div>
+                  <ul class="space-y-2 text-sm text-slate-200">
+                    <template x-for="t in (selected.threats || [])" :key="t">
+                      <li class="flex gap-2"><span style="color:#ff9ebc">⚠</span><span x-text="t"></span></li>
+                    </template>
+                    <li x-show="!(selected.threats || []).length" class="text-slate-500">Brak zidentyfikowanych zagrożeń.</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div x-show="selected.investment_thesis" class="mt-5 rounded-xl border border-white/10 bg-ink-900/50 p-4">
+                <p class="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">Teza inwestycyjna</p>
+                <p class="mt-1 text-sm leading-relaxed text-slate-100" x-text="selected.investment_thesis"></p>
+              </div>
+            </div>
+
+            <!-- Credibility hint when no insights yet -->
+            <div x-show="!hasInsights(selected)" class="card border-dashed p-6 text-center text-slate-400">
+              Uruchom skan AI, aby wygenerować pełną syntezę <b class="text-white">plusów i minusów</b> oraz tezę inwestycyjną — Claude oceni też wiarygodność każdego artykułu (fake-news filter).
+            </div>
+
+            <!-- Chart + category breakdown -->
+            <div class="grid gap-5 lg:grid-cols-5">
+              <div class="card p-6 lg:col-span-3">
+                <h3 class="font-display text-lg font-semibold text-white">Trend ryzyka (90 dni)</h3>
+                <p class="text-xs text-slate-400">Historia reputacji i ryzyka inwestycyjnego w czasie</p>
+                <canvas id="companyTrendChart" class="!h-64 mt-4"></canvas>
+              </div>
+              <div class="card p-6 lg:col-span-2">
+                <h3 class="font-display text-lg font-semibold text-white">Rozkład kategorii</h3>
+                <p class="text-xs text-slate-400">Udział kategorii ryzyka w wyniku</p>
+                <div class="mt-4 space-y-3" x-show="selected.score_components?.category_breakdown">
+                  <template x-for="[cat, pct] in Object.entries(selected.score_components?.category_breakdown || {}).sort((a,b)=>b[1]-a[1])" :key="cat">
+                    <div>
+                      <div class="flex items-center justify-between text-xs">
+                        <span class="text-slate-300" x-text="prettyCategory(cat)"></span>
+                        <span class="text-slate-400" x-text="pct.toFixed(1) + '%'"></span>
+                      </div>
+                      <div class="mt-1 h-2 overflow-hidden rounded-full bg-white/5">
+                        <div class="h-full rounded-full bg-gradient-to-r from-accent-500 to-crit" :style="`width: ${pct}%`"></div>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+                <p x-show="!selected.score_components?.category_breakdown" class="mt-4 text-sm text-slate-500">Brak danych — uruchom skan.</p>
+              </div>
+            </div>
+
+            <!-- Articles -->
+            <div class="card p-6">
+              <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 class="font-display text-lg font-semibold text-white">Artykuły medialne</h3>
+                  <p class="text-xs text-slate-400">Analiza AI (Claude) z oceną wiarygodności, sentymentu i ryzyka</p>
+                </div>
+                <div class="flex items-center gap-1 rounded-full border border-white/10 bg-white/5 p-1 text-xs">
+                  <template x-for="f in articleFilters" :key="f.id">
+                    <button @click="articleFilter = f.id" :class="articleFilter === f.id ? 'bg-accent-600 text-white' : 'text-slate-300'" class="rounded-full px-3 py-1 transition" x-text="f.label"></button>
+                  </template>
+                </div>
+              </div>
+
+              <div x-show="articleFilter === 'relevant' && unrelatedCount > 0" class="mb-3 flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 text-xs text-slate-400">
+                <span>
+                  Ukryto <b class="text-white" x-text="unrelatedCount"></b>
+                  <span x-text="unrelatedCount === 1 ? 'artykuł który nie dotyczy tej firmy (Claude oznaczył \'mentions_company=false\')' : 'artykułów, które nie dotyczą tej firmy (Claude oznaczył \'mentions_company=false\')'"></span>.
+                  Nie mają wpływu na ocenę ryzyka.
+                </span>
+                <button @click="articleFilter = 'unrelated'" class="shrink-0 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-slate-200 hover:bg-white/10">Pokaż mimo to</button>
+              </div>
+
+              <div class="space-y-3">
+                <template x-for="a in filteredArticles" :key="a.id">
+                  <div class="rounded-xl border border-white/5 bg-white/[0.02] p-4 transition hover:border-white/10">
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                      <div class="min-w-0 flex-1">
+                        <a :href="a.url" target="_blank" rel="noopener" class="font-display text-base font-semibold text-white transition hover:text-accent-400" x-text="a.title || a.url"></a>
+                        <p class="mt-1 text-xs text-slate-400">
+                          <b x-text="a.source || 'źródło'"></b>
+                          <span x-show="a.published_at"> · <span x-text="fmtDate(a.published_at)"></span></span>
+                        </p>
+                      </div>
+                      <div class="flex flex-wrap items-center gap-1.5">
+                        <span x-show="a.mentions_company === false" class="rounded-full border border-slate-500/60 bg-slate-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-slate-300" title="Artykuł nie dotyczy analizowanej spółki — pominięty w wyliczaniu ryzyka">nie dotyczy firmy</span>
+                        <span x-show="a.is_likely_fake" class="rounded-full border border-warn/50 bg-warn/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-warn" title="Niska wiarygodność / możliwy fake news">⚠ fake?</span>
+                        <span :class="credibilityPill(a.credibility_score)" x-text="credibilityText(a.credibility_score)" :title="a.credibility_notes || ''"></span>
+                        <span :class="riskLevelBadge(a.risk_level)" x-text="a.risk_level || '—'"></span>
+                        <span x-show="a.risk_category" class="badge-cat" x-text="prettyCategory(a.risk_category)"></span>
+                        <span :class="sentimentPill(a.sentiment_score)" x-text="sentimentText(a.sentiment_score, a.sentiment_label)"></span>
+                      </div>
+                    </div>
+
+                    <div x-show="a.is_likely_fake" class="mt-3 rounded-lg border border-warn/30 bg-warn/10 p-3 text-xs text-warn">
+                      <b>⚠ Artykuł oznaczony jako prawdopodobny fake news / niska wiarygodność.</b>
+                      <span class="block text-slate-300" x-show="a.credibility_notes" x-text="a.credibility_notes"></span>
+                      <span class="mt-1 block text-slate-400">Wpływ na scoring został zredukowany ~10-krotnie.</span>
+                    </div>
+
+                    <p x-show="a.summary" class="mt-3 text-sm text-slate-300" x-text="a.summary"></p>
+
+                    <div x-show="a.key_facts && a.key_facts.length" class="mt-3">
+                      <p class="text-[10px] uppercase tracking-widest text-slate-500">Kluczowe fakty</p>
+                      <ul class="mt-1 space-y-1 text-sm text-slate-300">
+                        <template x-for="f in a.key_facts" :key="f">
+                          <li class="flex gap-2"><span class="text-accent-400">▸</span><span x-text="f"></span></li>
+                        </template>
+                      </ul>
+                    </div>
+
+                    <div class="mt-3 grid gap-3 md:grid-cols-2" x-show="(a.positive_points && a.positive_points.length) || (a.red_flags && a.red_flags.length)">
+                      <div x-show="a.positive_points && a.positive_points.length" class="rounded-lg border border-good/30 bg-good/5 p-3">
+                        <p class="text-[10px] font-semibold uppercase tracking-widest text-good">Pozytywne sygnały</p>
+                        <ul class="mt-1 space-y-0.5 text-sm text-slate-200">
+                          <template x-for="p in (a.positive_points || [])" :key="p">
+                            <li class="flex gap-2"><span class="text-good">✓</span><span x-text="p"></span></li>
+                          </template>
+                        </ul>
+                      </div>
+                      <div x-show="a.red_flags && a.red_flags.length" class="rounded-lg border border-crit/30 bg-crit/10 p-3">
+                        <p class="text-[10px] font-semibold uppercase tracking-widest" style="color:#ff9ebc">AML red flags</p>
+                        <ul class="mt-1 space-y-0.5 text-sm text-slate-200">
+                          <template x-for="f in (a.red_flags || [])" :key="f">
+                            <li class="flex gap-2"><span>🚩</span><span x-text="f"></span></li>
+                          </template>
+                        </ul>
+                      </div>
+                    </div>
+
+                    <div class="mt-3 flex flex-wrap gap-3 text-xs text-slate-400">
+                      <span x-show="a.severity !== null && a.severity !== undefined">Severity: <b class="text-white" x-text="a.severity?.toFixed(1)"></b>/10</span>
+                      <span x-show="a.investment_risk !== null && a.investment_risk !== undefined">Inv. risk: <b class="text-white" x-text="a.investment_risk?.toFixed(1)"></b>/10</span>
+                      <span x-show="a.investment_impact">Impact: <b class="text-white" x-text="a.investment_impact"></b></span>
+                      <span x-show="a.credibility_score !== null && a.credibility_score !== undefined">Wiarygodność: <b class="text-white" x-text="(a.credibility_score*100).toFixed(0) + '%'"></b></span>
+                    </div>
+                  </div>
+                </template>
+                <div x-show="filteredArticles.length === 0" class="rounded-xl border border-dashed border-white/10 p-10 text-center text-slate-500">
+                  Brak artykułów. Kliknij <b class="text-white">Uruchom skan AI</b>.
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+      </section>
+    </main>
+
+    <!-- Add company modal -->
+    <div
+      x-show="showAdd"
+      x-transition.opacity
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      @click.self="showAdd = false"
+    >
+      <div class="w-full max-w-lg rounded-2xl border border-white/10 bg-ink-900 p-6 shadow-2xl" x-transition>
+        <div class="mb-4 flex items-center justify-between">
+          <h2 class="font-display text-xl font-semibold text-white">Nowa spółka</h2>
+          <button @click="showAdd = false" class="text-slate-400 hover:text-white">✕</button>
+        </div>
+        <form @submit.prevent="submitCompany" class="space-y-3">
+          <div>
+            <label class="label">Nazwa *</label>
+            <input required type="text" x-model="newCompany.name" class="input" placeholder="np. PKN Orlen SA" />
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="label">NIP</label>
+              <input type="text" x-model="newCompany.nip" class="input" placeholder="7740001454" />
+            </div>
+            <div>
+              <label class="label">KRS</label>
+              <input type="text" x-model="newCompany.krs" class="input" placeholder="0000028860" />
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="label">Ticker</label>
+              <input type="text" x-model="newCompany.ticker" class="input uppercase" placeholder="PKN" />
+            </div>
+            <div>
+              <label class="label">Sektor</label>
+              <input type="text" x-model="newCompany.sector" class="input" placeholder="Paliwa / Energia" />
+            </div>
+          </div>
+          <div>
+            <label class="label">Aliasy (rozdzielone przecinkami)</label>
+            <input type="text" x-model="newCompany.aliasesRaw" class="input" placeholder="Orlen, PKN Orlen, Orlen SA" />
+          </div>
+          <label class="flex items-center gap-2 text-sm text-slate-300">
+            <input type="checkbox" x-model="newCompany.scanNow" class="h-4 w-4 rounded border-white/20 bg-white/10" />
+            Uruchom skan AI od razu po zapisie
+          </label>
+          <div class="pt-2 flex justify-end gap-2">
+            <button type="button" @click="showAdd = false" class="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-slate-200">Anuluj</button>
+            <button type="submit" :disabled="submitting" class="rounded-full bg-gradient-to-r from-accent-500 to-accent-600 px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-accent-600/30 disabled:opacity-60">
+              <span x-text="submitting ? 'Zapisywanie…' : 'Zapisz'"></span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Toasts -->
+    <div class="fixed bottom-6 right-6 z-50 space-y-2">
+      <template x-for="t in toasts" :key="t.id">
+        <div
+          x-transition.opacity
+          :class="t.kind === 'error' ? 'border-crit/40 bg-crit/10' : t.kind === 'success' ? 'border-good/40 bg-good/10' : 'border-white/10 bg-ink-800'"
+          class="flex items-center gap-3 rounded-xl border px-4 py-3 text-sm text-white shadow-lg backdrop-blur"
+        >
+          <span x-text="t.icon"></span>
+          <span x-text="t.msg"></span>
+        </div>
+      </template>
+    </div>
+
+    <script src="/static/app.js?v=2"></script>
+  </body>
+</html>

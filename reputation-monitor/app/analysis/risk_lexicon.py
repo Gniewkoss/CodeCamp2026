@@ -1,132 +1,95 @@
+"""Risk lexicon — used as a fast pre-filter hint for the LLM and for
+backwards-compatible category weights in the scoring engine.
+
+The LLM does the real analysis; the lexicon just helps the scoring layer
+understand category weights when the model emits standardised labels.
+"""
+
 from __future__ import annotations
 
-from dataclasses import dataclass
-
-RISK_KEYWORDS: dict[str, dict] = {
+RISK_CATEGORIES: dict[str, dict] = {
     "corruption": {
-        "keywords": ["korupcja", "łapówka", "przekupstwo", "bribery", "corruption", "CBA", "ABW"],
-        "weight": 10,
+        "label": "Korupcja",
+        "weight": 10.0,
+        "keywords": [
+            "korupcja", "łapówka", "łapówki", "przekupstwo", "bribery", "corruption",
+            "CBA", "ABW", "kickback",
+        ],
     },
     "legal": {
+        "label": "Sprawy prawne",
+        "weight": 8.0,
         "keywords": [
-            "zarzuty",
-            "prokuratura",
-            "areszt",
-            "sąd",
-            "wyrok",
-            "pozew",
-            "charges",
-            "indicted",
-            "arrested",
+            "zarzuty", "prokuratura", "areszt", "sąd", "wyrok", "pozew",
+            "charges", "indicted", "arrested", "lawsuit", "investigation",
         ],
-        "weight": 8,
     },
     "management": {
+        "label": "Zarząd",
+        "weight": 5.5,
         "keywords": [
-            "rezygnacja zarządu",
-            "odwołanie",
-            "zwolnienie prezesa",
-            "CEO resignation",
-            "fired",
+            "rezygnacja zarządu", "odwołanie", "zwolnienie prezesa",
+            "CEO resignation", "fired", "dymisja", "zarząd",
         ],
-        "weight": 5,
     },
     "sanctions": {
+        "label": "Sankcje",
+        "weight": 9.5,
         "keywords": ["sankcje", "sanctions", "OFAC", "blacklist", "czarna lista", "embargo"],
-        "weight": 9,
     },
     "financial": {
+        "label": "Problemy finansowe",
+        "weight": 7.5,
         "keywords": [
-            "upadłość",
-            "bankructwo",
-            "windykacja",
-            "niewypłacalność",
-            "bankruptcy",
-            "insolvency",
-            "fraud",
+            "upadłość", "bankructwo", "windykacja", "niewypłacalność",
+            "bankruptcy", "insolvency", "fraud", "oszustwo", "wyłudzenie",
         ],
-        "weight": 7,
+    },
+    "money_laundering": {
+        "label": "Pranie pieniędzy",
+        "weight": 10.0,
+        "keywords": ["pranie pieniędzy", "money laundering", "AML", "KYC"],
     },
     "regulatory": {
+        "label": "Regulacyjne",
+        "weight": 6.5,
         "keywords": [
-            "KNF",
-            "UOKiK",
-            "kara",
-            "naruszenie",
-            "nadzór",
-            "investigation",
-            "fine",
-            "penalty",
+            "KNF", "UOKiK", "kara", "naruszenie", "nadzór",
+            "investigation", "fine", "penalty", "regulator",
         ],
-        "weight": 6,
+    },
+    "operational": {
+        "label": "Operacyjne",
+        "weight": 3.5,
+        "keywords": ["wyciek danych", "data breach", "cyberattack", "strajk", "strike"],
+    },
+    "esg": {
+        "label": "ESG",
+        "weight": 3.0,
+        "keywords": ["greenwashing", "pollution", "zanieczyszczenie", "skandal ekologiczny"],
     },
 }
 
 
-@dataclass
-class KeywordMatch:
-    category: str
-    keyword: str
-    weight: int
+def category_weight(category: str) -> float:
+    spec = RISK_CATEGORIES.get((category or "").lower())
+    return float(spec["weight"]) if spec else 0.0
 
 
-def match_risk_keywords(text: str) -> list[KeywordMatch]:
-    """Case-insensitive substring scan for lexicon hits (longer phrases first per category)."""
+def category_label(category: str) -> str:
+    spec = RISK_CATEGORIES.get((category or "").lower())
+    return str(spec["label"]) if spec else category
+
+
+def quick_keyword_hints(text: str) -> list[str]:
+    """Case-insensitive substring scan — used only as a short hint list
+    fed to the LLM so it can't miss obvious signals."""
     if not text:
         return []
     lowered = text.lower()
-    hits: list[KeywordMatch] = []
-    for category, spec in RISK_KEYWORDS.items():
-        weight = int(spec["weight"])
-        kws = sorted(spec["keywords"], key=len, reverse=True)
-        for kw in kws:
-            if kw.lower() in lowered:
-                hits.append(KeywordMatch(category=category, keyword=kw, weight=weight))
-    return hits
-
-
-def categories_from_matches(matches: list[KeywordMatch]) -> list[str]:
-    seen: set[str] = set()
-    out: list[str] = []
-    for m in matches:
-        if m.category not in seen:
-            seen.add(m.category)
-            out.append(m.category)
-    return out
-
-
-def dominant_category(matches: list[KeywordMatch]) -> str | None:
-    if not matches:
-        return None
-    best_cat = None
-    best_w = -1
-    for m in matches:
-        if m.weight > best_w:
-            best_w = m.weight
-            best_cat = m.category
-    return best_cat
-
-
-def keyword_weight_sum_for_categories(
-    categories: list[str], weights: dict[str, float] | None = None
-) -> float:
-    src = weights or {k: float(v["weight"]) for k, v in RISK_KEYWORDS.items()}
-    return float(sum(src[c] for c in categories if c in src))
-
-
-def categories_from_stored_keywords(keywords: list[str] | None) -> list[str]:
-    """Infer lexicon categories from stored matched keyword strings (exact or substring)."""
-    if not keywords:
-        return []
-    cats: list[str] = []
-    seen: set[str] = set()
-    stored_l = [k.lower() for k in keywords]
-    for cat, spec in RISK_KEYWORDS.items():
+    hits: list[str] = []
+    for cat, spec in RISK_CATEGORIES.items():
         for kw in spec["keywords"]:
-            kwl = kw.lower()
-            if any(s == kwl or kwl in s or s in kwl for s in stored_l):
-                if cat not in seen:
-                    seen.add(cat)
-                    cats.append(cat)
-                break
-    return cats
+            if kw.lower() in lowered and kw not in hits:
+                hits.append(kw)
+    return hits[:40]

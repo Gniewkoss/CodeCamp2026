@@ -10,3 +10,7 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+repmonitor.db
+repmonitor.db-*
+*.sqlite
+*.sqlite3

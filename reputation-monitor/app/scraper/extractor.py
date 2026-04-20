@@ -1,6 +1,9 @@
+"""Lightweight article text extractor — httpx + BeautifulSoup."""
+
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
@@ -8,6 +11,11 @@ import httpx
 from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
+
+USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 ReputationMonitor/2.0"
+)
 
 
 @dataclass
@@ -17,109 +25,83 @@ class ExtractedArticle:
     language: str | None
 
 
-def _domain(url: str) -> str:
+def domain_of(url: str) -> str:
     try:
         return urlparse(url).netloc.lower().replace("www.", "")
     except Exception:
         return "unknown"
 
 
-def extract_with_newspaper(url: str) -> ExtractedArticle | None:
-    try:
-        from newspaper import Article
+_ARTICLE_SELECTORS = (
+    "article",
+    "main",
+    '[role="main"]',
+    ".article-body",
+    ".article__body",
+    ".articleBody",
+    ".post-content",
+    ".entry-content",
+    ".content",
+    "#article",
+)
 
-        art = Article(url, language="pl")
-        art.download()
-        art.parse()
-        return ExtractedArticle(title=art.title, text=art.text, language=art.meta_lang)
-    except Exception as e:
-        logger.debug("newspaper failed for %s: %s", url, e)
-        return None
 
-
-def extract_with_bs4(url: str, timeout: float = 25.0) -> ExtractedArticle | None:
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        )
-    }
+def fetch_article_text(url: str, *, timeout: float = 20.0) -> ExtractedArticle:
+    headers = {"User-Agent": USER_AGENT, "Accept-Language": "pl,en;q=0.8"}
     try:
         with httpx.Client(follow_redirects=True, timeout=timeout, headers=headers) as client:
             r = client.get(url)
             r.raise_for_status()
-        soup = BeautifulSoup(r.text, "lxml")
-        title = None
-        if soup.title and soup.title.string:
-            title = soup.title.string.strip()
-        for tag in soup(["script", "style", "noscript", "nav", "footer", "header"]):
-            tag.decompose()
-        parts: list[str] = []
-        for sel in ("article", "main", '[role="main"]', ".article-body", ".article__body"):
-            node = soup.select_one(sel)
-            if node:
-                t = node.get_text(separator="\n", strip=True)
-                if len(t) > 200:
-                    parts.append(t)
-                    break
-        if not parts:
-            body = soup.body or soup
-            parts.append(body.get_text(separator="\n", strip=True))
-        text = "\n".join(parts).strip()
-        if len(text) < 80:
-            return None
-        return ExtractedArticle(title=title, text=text[:500_000], language=None)
+            html = r.text
     except Exception as e:
-        logger.debug("bs4 extract failed for %s: %s", url, e)
-        return None
+        logger.debug("fetch failed for %s: %s", url, e)
+        return ExtractedArticle(title=None, text=None, language=None)
 
-
-async def extract_with_playwright(url: str) -> ExtractedArticle | None:
     try:
-        from playwright.async_api import async_playwright
+        soup = BeautifulSoup(html, "lxml")
+    except Exception:
+        soup = BeautifulSoup(html, "html.parser")
 
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            page = await browser.new_page()
-            await page.goto(url, wait_until="domcontentloaded", timeout=45_000)
-            title = await page.title()
-            text = await page.evaluate("() => document.body ? document.body.innerText : ''")
-            await browser.close()
-        text = (text or "").strip()
-        if len(text) < 80:
-            return None
-        return ExtractedArticle(title=title, text=text[:500_000], language=None)
-    except Exception as e:
-        logger.debug("playwright extract failed for %s: %s", url, e)
-        return None
+    title = None
+    if soup.title and soup.title.string:
+        title = soup.title.string.strip()
+    og = soup.find("meta", property="og:title")
+    if og and og.get("content"):
+        title = og["content"].strip()
 
+    for tag in soup(["script", "style", "noscript", "nav", "footer", "header", "aside", "form", "iframe"]):
+        tag.decompose()
 
-def fetch_article_text(url: str, *, use_playwright: bool = False) -> ExtractedArticle:
-    ex = extract_with_newspaper(url)
-    if ex and ex.text and len(ex.text) > 80:
-        return ex
-    ex = extract_with_bs4(url)
-    if ex and ex.text:
-        return ex
-    if use_playwright:
-        import asyncio
+    best_text = ""
+    for sel in _ARTICLE_SELECTORS:
+        node = soup.select_one(sel)
+        if not node:
+            continue
+        t = node.get_text(separator="\n", strip=True)
+        if len(t) > len(best_text):
+            best_text = t
+        if len(best_text) > 600:
+            break
 
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        pw = loop.run_until_complete(extract_with_playwright(url))
-        if pw and pw.text:
-            return pw
-    return ex or ExtractedArticle(title=None, text=None, language=None)
+    if len(best_text) < 200 and soup.body:
+        best_text = soup.body.get_text(separator="\n", strip=True)
+
+    text = re.sub(r"\n{3,}", "\n\n", best_text).strip()
+    if len(text) < 40:
+        text = ""
+
+    language = None
+    html_tag = soup.find("html")
+    if html_tag and html_tag.get("lang"):
+        language = html_tag["lang"][:8]
+
+    return ExtractedArticle(title=title, text=text[:60000] or None, language=language)
 
 
 def infer_language(text: str | None) -> str:
     if not text:
         return "pl"
     sample = text[:2000].lower()
-    pl_markers = ("ą", "ę", "ł", "ń", "ó", "ś", "ź", "ż", "ć", " i ", " w ", " na ")
-    if any(m in sample for m in pl_markers if len(m) == 1) or " w " in f" {sample} ":
+    if any(ch in sample for ch in "ąęłńóśźżć"):
         return "pl"
     return "en"
