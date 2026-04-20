@@ -37,9 +37,18 @@ class Settings(BaseSettings):
     # Sanctions XML/HTML cache directory (Docker: /data/sanctions)
     sanctions_cache_dir: str = "./data/sanctions"
 
-    # Safety limits so a single scan never runs away
-    max_articles_per_scan: int = 25
+    # Safety limits so a single scan never runs away.
+    # 25 was too tight — large companies (InPost, Orlen) have hundreds of
+    # fresh articles per month. 100 keeps the Claude bill sane while giving
+    # the verdict real coverage.
+    max_articles_per_scan: int = 100
     max_article_chars: int = 14000
+    # News recency window (days). NewsAPI is queried with ?from=today-N
+    # so each scan brings in FRESH coverage, not the same backlog.
+    news_lookback_days: int = 60
+    # Skip re-analysing articles that were already analysed within this window
+    # (avoids burning Claude credits on every re-scan).
+    reanalysis_cooldown_hours: int = 24
 
     @property
     def is_sqlite(self) -> bool:

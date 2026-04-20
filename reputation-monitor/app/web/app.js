@@ -55,6 +55,22 @@ function app() {
     showAdd: false,
     submitting: false,
     lookup: { query: "", running: false, status: "", error: false },
+    scanProgress: {
+      visible: false,
+      company: "",
+      resolvedNote: "",
+      elapsed: 0,
+      steps: [
+        { id: "resolve",   icon: "🧠", label: "Rozpoznanie firmy przez AI",            hint: "Claude szuka oficjalnej nazwy, NIP, KRS i aliasów medialnych",        status: "pending" },
+        { id: "registry",  icon: "🏛️", label: "Rejestry MF / KRS / CEIDG",              hint: "Pobieranie danych prawnych: adres, zarząd, PKD, status VAT",         status: "pending" },
+        { id: "scraping",  icon: "📡", label: "Zbieranie artykułów z sieci",           hint: "Google News, NewsAPI, RSS (pb.pl, bankier, forsal), GDELT",          status: "pending" },
+        { id: "analyzing", icon: "🤖", label: "Analiza AI każdego artykułu",           hint: "Sentyment, red flags, wiarygodność, dopasowanie do spółki",          status: "pending", progress: 0, total: 0 },
+        { id: "events",    icon: "⚖️", label: "Kontrola sankcji i zdarzeń ryzyka",     hint: "UE, OFAC, lista konsolidowana MSW, zdarzenia z KRS",                 status: "pending" },
+        { id: "verdict",   icon: "🎯", label: "Werdykt AI",                            hint: "Claude syntezuje sygnały w jedną rekomendację: PROCEED / CAUTION / AVOID", status: "pending" },
+        { id: "synth",     icon: "📊", label: "SWOT i teza inwestycyjna",              hint: "Drugi pass Claude'a — mocne/słabe strony, szanse, zagrożenia",       status: "pending" },
+      ],
+      _timer: null,
+    },
     newCompany: {
       name: "", nip: "", krs: "", ticker: "", sector: "", aliasesRaw: "", scanNow: true,
     },
@@ -248,43 +264,49 @@ function app() {
       if (!q) return;
       this.lookup.running = true;
       this.lookup.error = false;
-      this.lookup.status = "Krok 1/2 · rozpoznaję firmę i dociągam dane z rejestrów…";
+      this.lookup.status = "";
+      this.openScanProgress(q, "Szukam w rejestrach i proszę Claude'a o rozpoznanie…");
+      this.markStep("resolve", "active", { detail: `Analizuję wpis: „${q}"` });
       try {
         const res = await this.api("/api/companies/quick-lookup", {
           method: "POST",
           body: JSON.stringify({ query: q, scan: true }),
         });
-        const resolvedName = res.resolved_name || (res.registry_record && res.registry_record.name) || "";
+        const resolvedName = res.resolved_name || (res.registry_record && res.registry_record.name) || q;
+        this.scanProgress.company = resolvedName;
+        let resolvedNote = "";
         if (res.resolved_from === "registry" && res.registry_record) {
           const srcs = (res.registry_record.sources || []).join(", ");
-          this.lookup.status =
-            `Rozpoznano w rejestrze: ${res.registry_record.name}` +
-            (srcs ? ` (${srcs})` : "") +
-            ". Krok 2/2 · szukam artykułów po pełnej nazwie i aliasach…";
+          resolvedNote = `Znaleziono w rejestrze (${srcs || "MF/KRS/CEIDG"})`;
           this.toast(`${res.registry_record.name} — dane z rejestru`);
-        } else if (res.resolved_from === "ai" && resolvedName) {
-          this.lookup.status =
-            `AI rozpoznało: „${resolvedName}" (na podstawie „${q}"). Krok 2/2 · szukam artykułów po pełnej nazwie i aliasach…`;
-          this.toast(`AI rozpoznało wpis „${q}" jako ${resolvedName}`);
-        } else if (res.created) {
-          this.lookup.status = "Firma dodana — krok 2/2 · szukam artykułów…";
+        } else if (res.resolved_from === "ai") {
+          resolvedNote = `AI rozpoznało: „${resolvedName}" (z wpisu „${q}")`;
+          this.toast(`AI rozpoznało „${q}" jako ${resolvedName}`);
         } else {
-          this.lookup.status = "Firma już istnieje — krok 2/2 · szukam artykułów…";
+          resolvedNote = `Kontynuuję jako: ${resolvedName}`;
         }
+        this.scanProgress.resolvedNote = resolvedNote;
+        this.markStep("resolve", "done", { detail: resolvedNote });
+        this.markStep("registry", res.from_registry ? "done" : "active", {
+          detail: res.from_registry
+            ? `Dane z rejestru: ${(res.registry_record && res.registry_record.sources || []).join(" · ") || "MF/KRS/CEIDG"}`
+            : "Tylko dane od AI — brak wpisu w rejestrach",
+        });
         await this.openCompany(res.company_id);
         await this.loadCompanies();
         if (res.scan_job_id) {
           this.scanning = true;
           this.pollScan(res.scan_job_id).finally(() => { this.scanning = false; });
+        } else {
+          this.closeScanProgress(true, "Pominięto skan artykułów.");
         }
         this.lookup.query = "";
-        this.lookup.status = "";
       } catch (e) {
         this.lookup.error = true;
-        // The backend returns 404 with a Polish detail message when an
-        // identifier doesn't resolve → show that verbatim instead of the raw URL.
         const msg = (e && e.message) ? e.message : "Nie udało się wyszukać firmy.";
         this.lookup.status = msg;
+        this.markStep("resolve", "error", { detail: msg });
+        this.closeScanProgress(false, msg);
         this.toast(msg);
       } finally {
         this.lookup.running = false;
@@ -349,29 +371,93 @@ function app() {
     async startScan() {
       if (!this.selected || this.scanning) return;
       this.scanning = true;
-      this.toast("Uruchamiam skan AI…", "info", "⚙️");
+      this.openScanProgress(this.selected.name);
+      this.markStep("resolve", "done");
+      this.markStep("registry", "done");
       try {
         const { job_id } = await this.api(`/api/companies/${this.selected.id}/scan`, { method: "POST" });
         await this.pollScan(job_id);
       } catch (e) {
+        this.closeScanProgress(false, "Błąd: " + e.message);
         this.toast("Błąd: " + e.message, "error");
       } finally {
         this.scanning = false;
       }
     },
 
+    openScanProgress(companyName, resolvedNote = "") {
+      this.scanProgress.visible = true;
+      this.scanProgress.company = companyName || "—";
+      this.scanProgress.resolvedNote = resolvedNote || "";
+      this.scanProgress.elapsed = 0;
+      this.scanProgress.steps.forEach((s) => {
+        s.status = "pending";
+        if (s.id === "analyzing") { s.progress = 0; s.total = 0; s.detail = ""; }
+        else { s.detail = ""; }
+      });
+      if (this.scanProgress._timer) clearInterval(this.scanProgress._timer);
+      this.scanProgress._timer = setInterval(() => { this.scanProgress.elapsed += 1; }, 1000);
+    },
+
+    closeScanProgress(ok = true, finalDetail = "") {
+      if (this.scanProgress._timer) { clearInterval(this.scanProgress._timer); this.scanProgress._timer = null; }
+      if (ok) {
+        this.scanProgress.steps.forEach((s) => { if (s.status !== "error") s.status = "done"; });
+      }
+      if (finalDetail) {
+        const last = this.scanProgress.steps[this.scanProgress.steps.length - 1];
+        if (last) last.detail = finalDetail;
+      }
+      setTimeout(() => { this.scanProgress.visible = false; }, ok ? 900 : 2500);
+    },
+
+    markStep(id, status, extras = {}) {
+      const steps = this.scanProgress.steps;
+      const idx = steps.findIndex((s) => s.id === id);
+      if (idx === -1) return;
+      // Any step before the active one becomes done; the active one gets `status`.
+      for (let i = 0; i < idx; i++) if (steps[i].status !== "error") steps[i].status = "done";
+      steps[idx].status = status;
+      if (extras.detail !== undefined) steps[idx].detail = extras.detail;
+      if (extras.progress !== undefined) steps[idx].progress = extras.progress;
+      if (extras.total !== undefined) steps[idx].total = extras.total;
+    },
+
+    _stageToStepId(stage) {
+      return ({
+        scraping: "scraping",
+        registry: "registry",
+        analyzing: "analyzing",
+        events: "events",
+        verdict: "verdict",
+        synth: "synth",
+        done: null,
+      })[stage] || null;
+    },
+
     async pollScan(jobId) {
-      for (let i = 0; i < 180; i++) {
-        await new Promise((r) => setTimeout(r, 2500));
+      for (let i = 0; i < 300; i++) {
+        await new Promise((r) => setTimeout(r, 1500));
         try {
           const job = await this.api(`/api/scans/${jobId}`);
+          const stepId = this._stageToStepId(job.stage);
+          if (stepId) {
+            const extras = { detail: job.stage_detail || "" };
+            if (job.stage === "analyzing") {
+              extras.progress = job.articles_analyzed || 0;
+              extras.total = job.sources_found || 0;
+            }
+            this.markStep(stepId, "active", extras);
+          }
           if (job.status === "done") {
+            this.closeScanProgress(true, job.message || "");
             this.toast(`Skan zakończony — ${job.articles_analyzed}/${job.sources_found} artykułów`, "success", "✅");
-            await this.openCompany(this.selected.id);
+            if (this.selected) await this.openCompany(this.selected.id);
             this.refreshOverview();
             return;
           }
           if (job.status === "error") {
+            this.closeScanProgress(false, job.message || "nieznany błąd");
             this.toast("Skan nieudany: " + (job.message || "nieznany błąd"), "error");
             return;
           }
@@ -379,6 +465,7 @@ function app() {
           // transient — keep polling
         }
       }
+      this.closeScanProgress(false, "Przekroczono czas oczekiwania");
       this.toast("Przekroczono czas oczekiwania na skan", "error");
     },
 

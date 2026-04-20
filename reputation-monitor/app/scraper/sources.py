@@ -7,15 +7,15 @@ is done by the Claude analyzer downstream.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any, Iterable
 from urllib.parse import urlparse
 
 import feedparser
 import httpx
-from rapidfuzz import fuzz
 
 from app.config import get_settings
 
@@ -91,31 +91,53 @@ def _name_variants(name: str, aliases: Iterable[str] | None) -> list[str]:
     return [v for v in variants if v]
 
 
-def _fuzzy_match(hay: str, needles: list[str], threshold: int = 80) -> bool:
+def _strict_match(hay: str, needles: list[str]) -> bool:
+    """Strict word-boundary match — no fuzzy/partial_ratio.
+
+    Partial fuzz ratio on short brand names ("mbank", "orlen") gives massive
+    false-positives: it matches any article that happens to contain the
+    substring ("banki", "oren") in unrelated coverage. We therefore require
+    the needle to appear as a *whole word* (Unicode-aware) in the haystack.
+    """
     if not hay:
         return False
-    blob = hay.lower()
+    blob = hay
     for n in needles:
-        nl = n.lower()
-        if nl in blob:
-            return True
-        if len(nl) >= 4 and fuzz.partial_ratio(nl, blob) >= threshold:
+        n = (n or "").strip()
+        if len(n) < 2:
+            continue
+        # Word-boundary regex, Unicode-safe, case-insensitive.
+        pattern = rf"(?<!\w){re.escape(n)}(?!\w)"
+        if re.search(pattern, blob, flags=re.IGNORECASE | re.UNICODE):
             return True
     return False
 
 
-def fetch_newsapi(company_name: str, aliases: list[str] | None = None, page_size: int = 50) -> list[RawArticle]:
+def _fuzzy_match(hay: str, needles: list[str], threshold: int = 80) -> bool:  # backwards compat
+    return _strict_match(hay, needles)
+
+
+def fetch_newsapi(company_name: str, aliases: list[str] | None = None, page_size: int = 100) -> list[RawArticle]:
+    """Query NewsAPI /everything with a time-bounded freshness window.
+
+    Uses every meaningful alias (up to 6) joined with OR so that scans of
+    "InPost" actually catch "Grupa InPost" and "InPost Paczkomaty" coverage.
+    Adds ?from=today-N so re-scans surface fresh stories rather than the
+    same backlog.
+    """
     settings = get_settings()
     if not settings.newsapi_key:
         return []
     url = "https://newsapi.org/v2/everything"
     variants = _name_variants(company_name, aliases)
-    query = " OR ".join(f'"{v}"' for v in variants[:4]) or f'"{company_name}"'
+    query = " OR ".join(f'"{v}"' for v in variants[:6]) or f'"{company_name}"'
+    since = datetime.now(timezone.utc) - timedelta(days=settings.news_lookback_days)
     params = {
         "q": query,
         "language": "pl",
         "sortBy": "publishedAt",
-        "pageSize": page_size,
+        "pageSize": min(page_size, 100),
+        "from": since.strftime("%Y-%m-%d"),
         "apiKey": settings.newsapi_key,
     }
     try:
@@ -132,17 +154,81 @@ def fetch_newsapi(company_name: str, aliases: list[str] | None = None, page_size
         u = art.get("url")
         if not u:
             continue
+        title = art.get("title") or ""
+        body = art.get("description") or art.get("content") or ""
+        # Even NewsAPI sometimes returns loose matches — keep only those that
+        # contain the company name as a proper word.
+        if not _strict_match(f"{title} {body}", variants):
+            continue
         dom = urlparse(u).netloc.lower().replace("www.", "")
         out.append(
             RawArticle(
                 url=str(u),
-                title=art.get("title"),
+                title=title or None,
                 source=dom or "newsapi",
                 published_at=_parse_dt(art.get("publishedAt")),
                 language="pl",
-                summary=art.get("description") or art.get("content"),
+                summary=body or None,
             )
         )
+    logger.info("NewsAPI: %d articles for query %r (window %sd)", len(out), query[:120], settings.news_lookback_days)
+    return out
+
+
+def fetch_google_news(company_name: str, aliases: list[str] | None = None, limit: int = 80) -> list[RawArticle]:
+    """Free, keyless news search via Google News RSS.
+
+    Much more reliable than NewsAPI for Polish content when the NewsAPI key
+    is missing / rate-limited (we just saw 401s for free-tier keys). Google
+    News returns fresh, company-filtered coverage out of the box — we still
+    post-filter with a strict word-boundary match against the aliases, so
+    false positives never leak into the analysis pipeline.
+    """
+    variants = _name_variants(company_name, aliases)
+    if not variants:
+        return []
+    # Quote every variant and OR them — Google News understands Boolean syntax.
+    quoted = [f'"{v}"' for v in variants[:6]]
+    query = " OR ".join(quoted)
+    url = "https://news.google.com/rss/search"
+    params = {"q": query, "hl": "pl", "gl": "PL", "ceid": "PL:pl"}
+    try:
+        with httpx.Client(timeout=25.0, headers={"User-Agent": USER_AGENT}, follow_redirects=True) as client:
+            r = client.get(url, params=params)
+            r.raise_for_status()
+            parsed = feedparser.parse(r.text)
+    except Exception as e:
+        logger.warning("GoogleNews error: %s", e)
+        return []
+    out: list[RawArticle] = []
+    for entry in (parsed.entries or [])[:limit]:
+        link = entry.get("link")
+        if not link:
+            continue
+        title = entry.get("title") or ""
+        summary = entry.get("summary") or entry.get("description") or ""
+        # Final safety: drop entries where no alias appears as a whole word.
+        if not _strict_match(f"{title} {summary}", variants):
+            continue
+        # Google News wraps the source domain inside the description — pull
+        # it out so UI shows pb.pl / bankier.pl etc., not "news.google.com".
+        src_domain = None
+        src_el = entry.get("source")
+        if isinstance(src_el, dict):
+            src_domain = (src_el.get("title") or "").lower().strip() or None
+        if not src_domain:
+            src_domain = urlparse(link).netloc.lower().replace("www.", "") or "google-news"
+        out.append(
+            RawArticle(
+                url=str(link),
+                title=str(title) or None,
+                source=src_domain,
+                published_at=_parse_dt(entry.get("published") or entry.get("updated")),
+                language="pl",
+                summary=(summary[:2000] if summary else None),
+            )
+        )
+    logger.info("GoogleNews: %d articles for %r", len(out), query[:120])
     return out
 
 
@@ -206,7 +292,7 @@ def fetch_rss(company_name: str, aliases: list[str] | None = None) -> list[RawAr
             title = entry.get("title") or ""
             summary = entry.get("summary") or entry.get("description") or ""
             haystack = f"{title} {summary}"
-            if not _fuzzy_match(haystack, needles):
+            if not _strict_match(haystack, needles):
                 continue
             out.append(
                 RawArticle(
@@ -231,6 +317,7 @@ def collect_all_sources(
     merged: list[RawArticle] = []
     for batch in (
         fetch_newsapi(company_name, aliases),
+        fetch_google_news(company_name, aliases),
         fetch_rss(company_name, aliases),
         fetch_gdelt(company_name),
     ):

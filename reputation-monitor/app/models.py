@@ -234,6 +234,10 @@ class ScanJob(Base):
         String(36), ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True
     )
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")  # pending|running|done|error
+    # Fine-grained pipeline stage for nice UI progress. One of:
+    # resolving | registry | scraping | analyzing | events | verdict | synth | done
+    stage: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    stage_detail: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     sources_found: Mapped[int] = mapped_column(Integer, default=0)
     articles_analyzed: Mapped[int] = mapped_column(Integer, default=0)

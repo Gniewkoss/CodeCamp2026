@@ -47,38 +47,65 @@ def fetch_krs_odpis_json(krs: str) -> dict[str, Any]:
     raise LookupError(f"KRS {num} not found in P or S register")
 
 
+def _as_text(v: Any) -> str:
+    """Flatten KRS name-ish fields into a clean string. KRS JSON sometimes
+    returns plain strings, sometimes ``{'wartosc': 'Jan'}`` wrappers, and
+    sometimes lists — the old parser happily wrote those dicts into the DB
+    (producing ``{'imie': 'J****'}`` in the UI). We unwrap them here and
+    reject anything we can't render."""
+    if v is None:
+        return ""
+    if isinstance(v, str):
+        return v.strip()
+    if isinstance(v, (int, float)):
+        return str(v)
+    if isinstance(v, dict):
+        for key in ("wartosc", "value", "text", "imie", "nazwisko", "nazwiskoCzlon"):
+            if key in v and isinstance(v[key], (str, int, float)):
+                return str(v[key]).strip()
+        return ""
+    if isinstance(v, list):
+        return " ".join(_as_text(x) for x in v if x).strip()
+    return ""
+
+
 def extract_persons_from_krs_blob(data: Any) -> list[dict[str, Any]]:
     """Heuristic walk for imiona/nazwisko + funkcja fields in KRS JSON."""
     found: list[dict[str, Any]] = []
     seen: set[tuple[str, str]] = set()
 
+    # Accept every realistic variant Polish KRS JSON uses — including the
+    # suffixed "nazwiskoCzlon" / "imionaCzlon" that appear in member-of-board
+    # blocks ("Członek Zarządu"). Match by prefix so we don't drop future
+    # schema additions like "nazwiskoPierwszeCzlon" etc.
+    nazwisko_prefixes = ("nazwisko", "nazwiska", "nazwisk")
+    imie_prefixes = ("imion", "imie", "imię", "imiepierwsze", "imiepierwszy")
+    funkcja_prefixes = ("funkcja", "funkcjawo", "funkcjawor")
+
+    def _find_prefix(kl: dict[str, str], prefixes: tuple[str, ...]) -> Any:
+        for k_lower, k_real in kl.items():
+            stripped = k_lower.replace("_", "")
+            for pref in prefixes:
+                if stripped.startswith(pref):
+                    return kl.get(k_real) if False else k_real  # return real key
+        return None
+
     def visit(x: Any) -> None:
         if isinstance(x, dict):
             kl = {k.lower(): k for k in x}
-            naz = None
-            im = None
-            for nk in ("nazwisko", "nazwisk"):
-                if nk in kl:
-                    naz = x.get(kl[nk])
-                    break
-            for ik in ("imiona", "imie", "imię"):
-                if ik in kl:
-                    im = x.get(kl[ik])
-                    break
-            if naz and str(naz).strip():
-                name = f"{im or ''} {naz}".strip()
-                role = None
-                for rk in ("funkcjaworganie", "funkcja", "funkcjaWOrganie"):
-                    for k in x:
-                        if k.lower().replace("_", "") == rk.lower().replace("_", ""):
-                            role = x.get(k)
-                            break
-                    if role:
-                        break
-                key = (name.lower(), (role or "")[:64].lower())
-                if key not in seen:
-                    seen.add(key)
-                    found.append({"full_name": name, "role": role or "—"})
+            nk = _find_prefix(kl, nazwisko_prefixes)
+            ik = _find_prefix(kl, imie_prefixes)
+            naz = _as_text(x.get(nk)) if nk else ""
+            im = _as_text(x.get(ik)) if ik else ""
+            if naz:
+                name = (f"{im} {naz}" if im else naz).strip()
+                if name:
+                    fk = _find_prefix(kl, funkcja_prefixes)
+                    role = _as_text(x.get(fk)) if fk else ""
+                    key = (name.lower(), role[:64].lower())
+                    if key not in seen:
+                        seen.add(key)
+                        found.append({"full_name": name, "role": role or "—"})
             for v in x.values():
                 visit(v)
         elif isinstance(x, list):

@@ -165,6 +165,8 @@ class ScanJobOut(BaseModel):
     id: str
     company_id: str
     status: str
+    stage: Optional[str] = None
+    stage_detail: Optional[str] = None
     message: Optional[str]
     sources_found: int
     articles_analyzed: int

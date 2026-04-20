@@ -380,9 +380,23 @@ def _events_slim(db: Session, company_id: str, limit: int = 15) -> list[dict[str
             select(RiskEvent)
             .where(RiskEvent.company_id == company_id, RiskEvent.is_excluded.is_(False))
             .order_by(RiskEvent.detected_at.desc())
-            .limit(limit)
+            .limit(limit * 3)  # over-fetch, we'll filter orphaned ones below
         ).all()
     )
+    # Drop events whose source article has been re-analysed as NOT about this
+    # company — those are legacy cross-contamination from the old pipeline.
+    clean: list[RiskEvent] = []
+    for e in events:
+        if e.article_id:
+            an = db.scalar(
+                select(ArticleAnalysis).where(ArticleAnalysis.article_id == e.article_id)
+            )
+            if an is not None and an.mentions_company is False:
+                continue
+        clean.append(e)
+        if len(clean) >= limit:
+            break
+    events = clean
     return [
         {
             "event_type": e.event_type,

@@ -57,6 +57,11 @@ def detect_events_from_article(db: Session, article: Article, analysis: ArticleA
     text = (article.content or "")[:3000]
     if not text.strip():
         return []
+    # Do not extract RiskEvents from articles that don't concern the company —
+    # Claude otherwise happily invents events about whoever the article IS
+    # about (e.g. Zondacrypto) and we attach them to the wrong company.
+    if analysis.mentions_company is False:
+        return []
     allowed = ", ".join(EVENT_TYPE_CHOICES)
     user = (
         f"SPÓŁKA: {company.name}\n"

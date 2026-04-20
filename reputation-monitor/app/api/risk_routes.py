@@ -233,6 +233,47 @@ def recheck_sanctions(company_id: str, db: Session = Depends(get_db)) -> Dict[st
     return {"new_matches": len(new_ev), "event_ids": [e.id for e in new_ev]}
 
 
+@router.post("/api/admin/cleanup-orphan-events")
+def cleanup_orphan_events(db: Session = Depends(get_db)) -> Dict[str, Any]:
+    """One-shot cleanup: delete RiskEvents whose source article was marked
+    by Claude as NOT mentioning the company (``mentions_company=false``).
+
+    Those events were created by an old version of the event-detector that
+    ran regardless of relevance and polluted companies like mBank with
+    Zondacrypto-derived "key concerns". Safe to call repeatedly.
+    """
+    from app.models import Article, ArticleAnalysis, RiskEvent
+
+    bad_ids = list(
+        db.scalars(
+            select(RiskEvent.id)
+            .join(Article, Article.id == RiskEvent.article_id)
+            .join(ArticleAnalysis, ArticleAnalysis.article_id == Article.id)
+            .where(ArticleAnalysis.mentions_company.is_(False))
+        ).all()
+    )
+    if not bad_ids:
+        return {"deleted": 0, "companies_rescored": 0}
+    affected = list(
+        db.scalars(
+            select(RiskEvent.company_id).where(RiskEvent.id.in_(bad_ids)).distinct()
+        ).all()
+    )
+    for cid in affected:
+        db.execute(
+            RiskEvent.__table__.delete().where(
+                RiskEvent.company_id == cid, RiskEvent.id.in_(bad_ids)
+            )
+        )
+    db.commit()
+    for cid in affected:
+        try:
+            recalculate_and_persist(db, cid, lookback_days=90)
+        except Exception:
+            continue
+    return {"deleted": len(bad_ids), "companies_rescored": len(affected)}
+
+
 @router.get("/api/ledger/companies")
 def ledger_company_list(db: Session = Depends(get_db)) -> List[Dict[str, Any]]:
     companies = list(db.scalars(select(Company).order_by(Company.name)).all())
