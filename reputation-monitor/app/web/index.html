@@ -44,7 +44,7 @@
     />
     <script defer src="https://unpkg.com/alpinejs@3.14.1/dist/cdn.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-    <link rel="stylesheet" href="/static/styles.css?v=2" />
+    <link rel="stylesheet" href="/static/styles.css?v=3" />
   </head>
   <body
     class="min-h-screen bg-ink-950 text-slate-200 font-sans antialiased"
@@ -796,10 +796,22 @@
               <div x-show="articleFilter === 'relevant' && unrelatedCount > 0" class="mb-3 flex items-center justify-between gap-3 rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 text-xs text-slate-400">
                 <span>
                   Ukryto <b class="text-white" x-text="unrelatedCount"></b>
-                  <span x-text="unrelatedCount === 1 ? 'artykuł który nie dotyczy tej firmy (Claude oznaczył \'mentions_company=false\')' : 'artykułów, które nie dotyczą tej firmy (Claude oznaczył \'mentions_company=false\')'"></span>.
+                  <span x-text="unrelatedCount === 1 ? 'artykuł który nie dotyczy tej firmy (Claude oznaczył mentions_company=false)' : 'artykułów, które nie dotyczą tej firmy (Claude oznaczył mentions_company=false)'"></span>.
                   Nie mają wpływu na ocenę ryzyka.
                 </span>
                 <button @click="articleFilter = 'unrelated'" class="shrink-0 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-slate-200 hover:bg-white/10">Pokaż mimo to</button>
+              </div>
+
+              <div x-show="articleFilter === 'relevant' && filteredArticles.length === 0 && (articles || []).length > 0" class="rounded-lg border border-warn/30 bg-warn/5 p-4 text-sm text-warn">
+                <b>Uwaga: żaden z <span x-text="(articles || []).length"></span> przeanalizowanych artykułów nie dotyczy tej firmy.</b>
+                <p class="mt-1 text-xs text-slate-300">
+                  Prawdopodobnie scraper pobrał wyniki fałszywie-pozytywne (zbyt krótka lub wieloznaczna nazwa).
+                  Spróbuj dodać aliasy, dopisać pełną nazwę prawną lub wpisać NIP/KRS firmy i uruchomić skan ponownie.
+                </p>
+                <div class="mt-2 flex gap-2">
+                  <button @click="articleFilter = 'unrelated'" class="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-slate-200 hover:bg-white/10">Pokaż odrzucone artykuły</button>
+                  <button @click="startScan()" x-show="selected" class="rounded-full border border-accent-500/50 bg-accent-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-accent-200 hover:bg-accent-500/20">Uruchom skan ponownie</button>
+                </div>
               </div>
 
               <div class="space-y-3">
@@ -946,6 +958,6 @@
       </template>
     </div>
 
-    <script src="/static/app.js?v=2"></script>
+    <script src="/static/app.js?v=3"></script>
   </body>
 </html>

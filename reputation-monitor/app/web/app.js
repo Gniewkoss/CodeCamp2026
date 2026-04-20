@@ -248,19 +248,24 @@ function app() {
       if (!q) return;
       this.lookup.running = true;
       this.lookup.error = false;
-      this.lookup.status = "Krok 1/2 · dociągam dane firmy z MF / KRS / CEIDG…";
+      this.lookup.status = "Krok 1/2 · rozpoznaję firmę i dociągam dane z rejestrów…";
       try {
         const res = await this.api("/api/companies/quick-lookup", {
           method: "POST",
           body: JSON.stringify({ query: q, scan: true }),
         });
-        if (res.from_registry && res.registry_record) {
+        const resolvedName = res.resolved_name || (res.registry_record && res.registry_record.name) || "";
+        if (res.resolved_from === "registry" && res.registry_record) {
           const srcs = (res.registry_record.sources || []).join(", ");
           this.lookup.status =
-            `Znaleziono: ${res.registry_record.name}` +
+            `Rozpoznano w rejestrze: ${res.registry_record.name}` +
             (srcs ? ` (${srcs})` : "") +
-            ". Krok 2/2 · szukam artykułów po nazwie firmy…";
-          this.toast(`${res.registry_record.name} — dane wczytane, uruchamiam skan AI`);
+            ". Krok 2/2 · szukam artykułów po pełnej nazwie i aliasach…";
+          this.toast(`${res.registry_record.name} — dane z rejestru`);
+        } else if (res.resolved_from === "ai" && resolvedName) {
+          this.lookup.status =
+            `AI rozpoznało: „${resolvedName}" (na podstawie „${q}"). Krok 2/2 · szukam artykułów po pełnej nazwie i aliasach…`;
+          this.toast(`AI rozpoznało wpis „${q}" jako ${resolvedName}`);
         } else if (res.created) {
           this.lookup.status = "Firma dodana — krok 2/2 · szukam artykułów…";
         } else {

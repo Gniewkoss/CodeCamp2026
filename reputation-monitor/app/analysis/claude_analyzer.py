@@ -494,3 +494,118 @@ def _fallback_insights(company_name: str, slim: list[dict[str, Any]]) -> Company
         threats=threats[:6],
         investment_thesis="Synteza offline — wymagany klucz Claude dla pełnej tezy inwestycyjnej.",
     )
+
+
+# ───────────────────────────────────────────────────────────────────────
+# Company identity resolver — short input ("inpost") → full ID kit
+# ───────────────────────────────────────────────────────────────────────
+
+@dataclass
+class ResolvedIdentity:
+    canonical_name: str = ""
+    nip: Optional[str] = None
+    krs: Optional[str] = None
+    sector: Optional[str] = None
+    aliases: list[str] = field(default_factory=list)
+    confidence: str = "low"  # low | medium | high
+    notes: str = ""
+
+
+_IDENTITY_SYSTEM = """You are a corporate-identity resolver for a Polish due-diligence tool.
+Given a SHORT or INFORMAL query that refers to a company (e.g. "inpost",
+"orlen", "cd projekt", "pko bp", "eurocash", "zondacrypto"), return STRICT
+JSON with the canonical Polish company that the user most likely means.
+
+Output JSON schema (no prose, no markdown):
+{
+  "canonical_name": "Official legal name as in KRS / MF white-list, e.g. 'InPost S.A.'",
+  "nip": "10 digits without dashes, or null if unsure",
+  "krs": "10 digits (with leading zeros) or null if unsure",
+  "sector": "short sector label in Polish, e.g. 'logistyka / kurier'",
+  "aliases": ["common short/brand/international variants used in Polish media",
+              "e.g. for InPost: InPost, Grupa InPost, InPost Paczkomaty, InPost S.A."],
+  "confidence": "low | medium | high",
+  "notes": "1-sentence reason"
+}
+
+Rules:
+- If the query is clearly a well-known Polish public/private company → confidence "high"
+  and you MUST provide canonical_name + aliases (at least 3 when possible).
+- If there are multiple candidates → pick the most prominent / largest in Polish media
+  and note ambiguity in "notes".
+- If you cannot identify the company (too generic, gibberish) → confidence "low"
+  and canonical_name = "" (empty).
+- NEVER invent a NIP / KRS you are not sure about — set them to null if unsure.
+- canonical_name must be the real legal name (with "S.A.", "Sp. z o.o." etc.).
+- aliases: include the bare brand, the full legal form, any common international name,
+  and any parent group if widely used in media. Do NOT include generic words like
+  "firma", "spółka", "grupa" on their own.
+"""
+
+
+def resolve_company_identity(query: str) -> Optional[ResolvedIdentity]:
+    """Use Claude to map a short/informal input to a canonical Polish company.
+
+    Returns None when there is no API key, the call fails, or Claude could not
+    identify a company with any confidence.
+    """
+    q = (query or "").strip()
+    if not q:
+        return None
+
+    settings = get_settings()
+    if not settings.anthropic_api_key:
+        return None
+
+    try:
+        import anthropic
+
+        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+        msg = client.messages.create(
+            model=settings.anthropic_model,
+            max_tokens=600,
+            system=_IDENTITY_SYSTEM,
+            messages=[{"role": "user", "content": f"QUERY: {q}"}],
+        )
+        raw = "".join(getattr(b, "text", "") or "" for b in msg.content).strip()
+        data = _extract_json(raw)
+        if not data:
+            logger.info("Identity resolver — non-JSON reply for %r: %s", q, raw[:200])
+            return None
+    except Exception as e:
+        logger.warning("Identity resolver call failed (%s): %s", q, e)
+        return None
+
+    canonical = (data.get("canonical_name") or "").strip()
+    confidence = (data.get("confidence") or "low").strip().lower()
+    if not canonical or confidence == "low":
+        return None
+
+    # Normalise NIP / KRS (digits only).
+    nip_raw = (data.get("nip") or "")
+    krs_raw = (data.get("krs") or "")
+    nip_digits = "".join(ch for ch in str(nip_raw) if ch.isdigit())
+    krs_digits = "".join(ch for ch in str(krs_raw) if ch.isdigit())
+    nip = nip_digits if len(nip_digits) == 10 else None
+    krs = krs_digits.zfill(10) if 1 <= len(krs_digits) <= 10 else None
+
+    aliases_raw = data.get("aliases") or []
+    aliases: list[str] = []
+    for a in aliases_raw if isinstance(aliases_raw, list) else []:
+        a = str(a or "").strip()
+        if len(a) >= 2 and a.lower() != canonical.lower() and a not in aliases:
+            aliases.append(a)
+    # Always include the bare user query as an alias — that is what the media
+    # often uses (e.g. "InPost" without ".S.A.").
+    if q and q.lower() not in (canonical.lower(), *[a.lower() for a in aliases]):
+        aliases.append(q)
+
+    return ResolvedIdentity(
+        canonical_name=canonical,
+        nip=nip,
+        krs=krs,
+        sector=(data.get("sector") or "").strip()[:128] or None,
+        aliases=aliases[:8],
+        confidence=confidence if confidence in ("low", "medium", "high") else "medium",
+        notes=(data.get("notes") or "").strip()[:240],
+    )

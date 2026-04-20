@@ -21,9 +21,11 @@ from app.scoring.calculator import (
     score_history_series,
     top_risk_companies,
 )
+from app.analysis.claude_analyzer import resolve_company_identity
 from app.scraper.registry import (
     RegistryRecord,
     guess_aliases_from_name,
+    lookup_krs,
     lookup_nip,
     lookup_query,
 )
@@ -56,6 +58,10 @@ class QuickLookupOut(BaseModel):
     from_registry: bool
     registry_record: Optional[Dict[str, Any]] = None
     scan_job_id: Optional[str] = None
+    resolved_name: Optional[str] = None
+    resolved_from: Optional[str] = None  # "registry" | "ai" | "input"
+    resolved_notes: Optional[str] = None
+    resolved_aliases: Optional[List[str]] = None
 
 
 class CompanyOut(BaseModel):
@@ -348,6 +354,37 @@ def _apply_registry(company: Company, rec: RegistryRecord) -> None:
 _IDENT_PREFIX_RE = re.compile(r"^\s*(?:nip|krs|regon)\s*[:=]?\s*", re.IGNORECASE)
 
 
+def _registry_matches_ai_name(rec: Optional[RegistryRecord], ai_name: str) -> bool:
+    """Guard against Claude hallucinating a NIP that belongs to a totally
+    different company. Returns True only when the registry's legal name
+    overlaps meaningfully with what Claude proposed as the canonical name.
+    """
+    if rec is None or not rec.name or not ai_name:
+        return False
+
+    def _core(name: str) -> str:
+        # Strip legal-form suffixes and punctuation — keeps only the brand words.
+        s = re.sub(
+            r"\b(?:spółka akcyjna|spolka akcyjna|s\.?a\.?|sp\.?\s*z\s*o\.?\s*o\.?"
+            r"|spółka z ograniczoną odpowiedzialnością|z o\.?\s*o\.?|w upadłości"
+            r"|w likwidacji|spółka komandytowa|sp\.?k\.?|group|grupa)\b",
+            "",
+            name,
+            flags=re.IGNORECASE,
+        )
+        s = re.sub(r"[^\w\s]", " ", s, flags=re.UNICODE)
+        return " ".join(s.split()).lower()
+
+    a, b = _core(ai_name), _core(rec.name)
+    if not a or not b:
+        return False
+    # Accept a match if either core name is contained in the other, or token
+    # set similarity is strong enough to prove they refer to the same entity.
+    if a in b or b in a:
+        return True
+    return fuzz.token_set_ratio(a, b) >= 70
+
+
 def _is_identifier_query(q: str) -> bool:
     """True when the query is a pure NIP/REGON/KRS number (with optional prefix)."""
     s = _IDENT_PREFIX_RE.sub("", q).strip()
@@ -388,9 +425,31 @@ def quick_lookup(
 
     is_id = _is_identifier_query(q)
 
-    # Try registry lookup. For identifiers this is the only reliable way to
-    # obtain a readable company name; for text queries it's a best-effort.
+    # Step 1 — registry lookup for structured identifiers (NIP/REGON/KRS).
     rec = lookup_query(q)
+
+    # Step 2 — AI identity resolver for free-text inputs ("inpost", "orlen"...).
+    # Claude maps the short/informal query to the canonical Polish company:
+    # official legal name, likely NIP/KRS, sector and media aliases. That way
+    # the subsequent article scan uses the proper name + every alias the press
+    # actually uses, instead of the literal string the user typed.
+    #
+    # Critical: Claude sometimes hallucinates or returns stale NIP/KRS numbers
+    # (e.g. "eurocash" → a NIP that actually belongs to Getin Noble Bank). We
+    # therefore *validate* every AI-supplied identifier against the registry
+    # response and reject it when the registry name and the AI canonical name
+    # are clearly different entities.
+    ai_identity = None
+    if rec is None and not is_id:
+        ai_identity = resolve_company_identity(q)
+        if ai_identity and ai_identity.nip:
+            candidate = lookup_nip(ai_identity.nip)
+            if _registry_matches_ai_name(candidate, ai_identity.canonical_name):
+                rec = candidate
+        if rec is None and ai_identity and ai_identity.krs:
+            candidate = lookup_krs(ai_identity.krs)
+            if _registry_matches_ai_name(candidate, ai_identity.canonical_name):
+                rec = candidate
 
     # Reject identifiers we can't resolve — don't save the KRS/NIP as a fake
     # company name. This fixes the "history shows 0000028860 instead of
@@ -405,11 +464,13 @@ def quick_lookup(
             ),
         )
 
-    # Resolve canonical display name.
+    # Resolve canonical display name — registry > AI canonical > raw query.
     if rec and (rec.name or "").strip():
         display_name = rec.name.strip()
+    elif ai_identity and ai_identity.canonical_name:
+        display_name = ai_identity.canonical_name.strip()
     else:
-        display_name = q  # free-text name typed by the user
+        display_name = q
 
     # Find existing DB row: prefer NIP, then KRS, then case-insensitive name match.
     existing: Optional[Company] = None
@@ -417,8 +478,21 @@ def quick_lookup(
         existing = db.scalar(select(Company).where(Company.nip == rec.nip))
     if existing is None and rec and rec.krs:
         existing = db.scalar(select(Company).where(Company.krs == rec.krs))
+    if existing is None and ai_identity and ai_identity.nip:
+        existing = db.scalar(select(Company).where(Company.nip == ai_identity.nip))
     if existing is None:
         existing = db.scalar(select(Company).where(Company.name.ilike(display_name)))
+
+    # Collect the richest possible alias set: AI media aliases + heuristic
+    # variants from the canonical name + the literal user input.
+    ai_aliases = list(ai_identity.aliases) if ai_identity else []
+    alias_set: list[str] = []
+    for a in ai_aliases + list(guess_aliases_from_name(display_name) or []):
+        a = (a or "").strip()
+        if a and a.lower() != display_name.lower() and a not in alias_set:
+            alias_set.append(a)
+    if q and q.lower() != display_name.lower() and q not in alias_set:
+        alias_set.append(q)
 
     created = False
     if existing is None:
@@ -426,21 +500,31 @@ def quick_lookup(
             name=display_name,
             country="PL",
             is_temporary=False,
-            aliases=guess_aliases_from_name(display_name) or None,
+            aliases=alias_set or None,
+            sector=(ai_identity.sector if ai_identity and ai_identity.sector else None),
         )
         db.add(existing)
         created = True
     else:
-        # If the existing row had a placeholder identifier-as-name stored from
-        # a previous buggy run, upgrade it to the proper registry name.
-        if rec and (rec.name or "").strip() and existing.name != rec.name:
+        # Upgrade legacy rows where the old code saved the identifier or raw
+        # user query as the display name.
+        if display_name and existing.name != display_name:
             digits_only = "".join(ch for ch in (existing.name or "") if ch.isdigit())
             if (
                 not existing.name
-                or existing.name.strip() == q
-                or digits_only == existing.name.replace(" ", "").replace("-", "")
+                or existing.name.strip().lower() == q.lower()
+                or digits_only == (existing.name or "").replace(" ", "").replace("-", "")
             ):
-                existing.name = rec.name.strip()
+                existing.name = display_name
+        # Merge aliases conservatively — append what's missing, keep order.
+        cur_al = list(existing.aliases or [])
+        for a in alias_set:
+            if a not in cur_al:
+                cur_al.append(a)
+        if cur_al:
+            existing.aliases = cur_al
+        if ai_identity and ai_identity.sector and not existing.sector:
+            existing.sector = ai_identity.sector
 
     if rec:
         _apply_registry(existing, rec)
@@ -457,12 +541,26 @@ def quick_lookup(
         job_id = job.id
         background_tasks.add_task(run_scan_in_background, existing.id, job.id)
 
+    if rec and (rec.name or "").strip():
+        resolved_from = "registry"
+        resolved_notes = None
+    elif ai_identity and ai_identity.canonical_name:
+        resolved_from = "ai"
+        resolved_notes = ai_identity.notes or None
+    else:
+        resolved_from = "input"
+        resolved_notes = None
+
     return QuickLookupOut(
         company_id=existing.id,
         created=created,
         from_registry=bool(rec),
         registry_record=(rec.to_dict() if rec else None),
         scan_job_id=job_id,
+        resolved_name=display_name,
+        resolved_from=resolved_from,
+        resolved_notes=resolved_notes,
+        resolved_aliases=alias_set or None,
     )
 
 
