@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.api.finance_routes import router as finance_router
 from app.api.risk_routes import router as risk_router
 from app.api.routes import router
 from app.database import init_db
@@ -30,6 +31,7 @@ app.add_middleware(
 
 app.include_router(router)
 app.include_router(risk_router)
+app.include_router(finance_router)
 
 
 @app.on_event("startup")

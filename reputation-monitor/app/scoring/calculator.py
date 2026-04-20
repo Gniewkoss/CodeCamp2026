@@ -17,9 +17,26 @@ from typing import Any, Optional
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.analysis.balance_ai_analyzer import BalanceVerdict
+from app.analysis.composite_score import build_composite
+from app.analysis.contract_intensity import ContractIntensity, compute_contract_intensity
+from app.analysis.financial_metrics import HealthBreakdown, RatiosPack, compute_ratios, compute_trend, financial_health_score
+from app.analysis.financial_extractor import ExtractedFigures
+from app.analysis.governance_risk import GovernanceResult
+from app.analysis.payment_reputation import PaymentReputationResult, assess_payment_reputation
 from app.analysis.risk_lexicon import RISK_CATEGORIES
 from app.analysis.risk_verdict import build_verdict, compute_signals
-from app.models import Article, ArticleAnalysis, Company, ScoreHistory
+from app.models import (
+    Article,
+    ArticleAnalysis,
+    Company,
+    Contract,
+    FinancialAIAnalysis,
+    FinancialFigures,
+    FinancialStatement,
+    PaymentReputation as PaymentReputationRow,
+    ScoreHistory,
+)
 from app.scoring.event_lifecycle import calculate_company_score
 
 SOURCE_AUTHORITY: dict[str, float] = {
@@ -212,14 +229,121 @@ def score_articles(rows: list[tuple[Article, ArticleAnalysis]], *, config: dict[
     return rep_score, inv_score, details, components
 
 
+def _load_financial_inputs(
+    db: Session, company_id: str
+) -> tuple[Optional[HealthBreakdown], Optional[BalanceVerdict], list[ExtractedFigures], list[RatiosPack]]:
+    """Load financial health + balance AI verdict for the composite scorer.
+
+    Pulls up to 3 most recent FinancialStatement rows with their figures,
+    re-computes ratios/trend and reads the latest FinancialAIAnalysis (if any).
+    """
+    stmt = (
+        select(FinancialStatement, FinancialFigures)
+        .join(FinancialFigures, FinancialFigures.statement_id == FinancialStatement.id)
+        .where(FinancialStatement.company_id == company_id)
+        .order_by(FinancialStatement.period_end.desc())
+        .limit(3)
+    )
+    rows = db.execute(stmt).all()
+    figures_by_year: list[ExtractedFigures] = []
+    for s, f in rows:
+        ex = ExtractedFigures(
+            period_end=s.period_end or "",
+            period_type=s.period_type or "annual",
+            currency=s.currency or "PLN",
+            source=s.source or "UNKNOWN",
+            revenue=f.revenue,
+            cost_of_revenue=f.cost_of_revenue,
+            operating_costs=f.operating_costs,
+            ebit=f.ebit,
+            ebitda=f.ebitda,
+            net_profit=f.net_profit,
+            total_assets=f.total_assets,
+            current_assets=f.current_assets,
+            non_current_assets=f.non_current_assets,
+            cash=f.cash,
+            inventory=f.inventory,
+            receivables=f.receivables,
+            total_liabilities=f.total_liabilities,
+            current_liabilities=f.current_liabilities,
+            non_current_liabilities=f.non_current_liabilities,
+            trade_payables=f.trade_payables,
+            equity=f.equity,
+            retained_earnings=f.retained_earnings,
+            cash_from_operations=f.cash_from_operations,
+            capex=f.capex,
+            insurance_costs_mentioned=f.insurance_costs_mentioned,
+        )
+        figures_by_year.append(ex)
+    ratios_by_year = [compute_ratios(f) for f in figures_by_year]
+    trend = compute_trend(figures_by_year) if figures_by_year else None
+    health = financial_health_score(ratios_by_year, trend=trend) if ratios_by_year else None
+
+    ai_row = db.scalar(
+        select(FinancialAIAnalysis)
+        .where(FinancialAIAnalysis.company_id == company_id)
+        .order_by(FinancialAIAnalysis.as_of.desc())
+        .limit(1)
+    )
+    balance_verdict: Optional[BalanceVerdict] = None
+    if ai_row is not None:
+        balance_verdict = BalanceVerdict(
+            condition=ai_row.condition or "unknown",
+            red_flags=list(ai_row.red_flags or []),
+            strengths=list(ai_row.strengths or []),
+            short_term_risks=list(ai_row.short_term_risks or []),
+            long_term_risks=list(ai_row.long_term_risks or []),
+            commentary=ai_row.commentary or "",
+            solvency_forecast_12m=ai_row.solvency_forecast_12m or "medium",
+            years_covered=list(ai_row.years_covered or []),
+        )
+    return health, balance_verdict, figures_by_year, ratios_by_year
+
+
+def _load_contract_intensity(db: Session, company_id: str) -> Optional[ContractIntensity]:
+    contracts = list(
+        db.scalars(
+            select(Contract)
+            .where(Contract.company_id == company_id)
+            .order_by(Contract.detected_at.desc())
+            .limit(300)
+        ).all()
+    )
+    if not contracts:
+        return None
+    return compute_contract_intensity(contracts)
+
+
+def _load_payment_reputation(db: Session, company_id: str, *, nip: Optional[str]) -> Optional[PaymentReputationResult]:
+    # Prefer the latest persisted PaymentReputation row if fresh; otherwise run now.
+    latest = db.scalar(
+        select(PaymentReputationRow)
+        .where(PaymentReputationRow.company_id == company_id)
+        .order_by(PaymentReputationRow.as_of.desc())
+        .limit(1)
+    )
+    if latest is not None:
+        return PaymentReputationResult(
+            score=float(latest.score or 50.0),
+            dbt_flag=latest.dbt_flag or "unknown",
+            dpo_days=latest.dpo_days,
+            events_count=int(latest.events_count or 0),
+            news_mentions=list(latest.news_mentions or []),
+            sources=dict(latest.sources or {}),
+        )
+    # Only compute on-demand when at least one article + one statement exist,
+    # so we don't hammer the DB on cold scans.
+    return None
+
+
 def recalculate_and_persist(
     db: Session, company_id: str, *, lookback_days: int = 90, config: dict[str, Any] | None = None
 ) -> ScoreHistory:
-    """Build a single unified verdict (AI + rules) and persist it.
+    """Build a unified verdict (composite score across 5 pillars) and persist it.
 
-    The legacy per-article metrics are still computed but used only as a
-    transparent breakdown in score_components["legacy"].  The authoritative
-    number that drives UI, recommendation and score history is the verdict.
+    The media verdict (`build_verdict`) is still computed and used as the
+    ``media`` pillar + recommendation-band reference. The authoritative number
+    exposed to the UI is the composite score.
     """
     company = db.get(Company, company_id)
     if company is None:
@@ -227,28 +351,47 @@ def recalculate_and_persist(
 
     now = datetime.now(timezone.utc)
 
-    # Build the single source of truth
-    verdict = build_verdict(db, company, as_of=now)
+    media_verdict = build_verdict(db, company, as_of=now)
     signals = compute_signals(db, company_id, as_of=now, lookback_days=lookback_days)
 
-    # Legacy breakdown — mentions_company only, kept for auditing and category histogram
     rows = _scan_articles(db, company_id, lookback_days)
     rep_score_legacy, inv_score_legacy, details, legacy_components = score_articles(rows, config=config)
 
     ledger = calculate_company_score(db, company_id, as_of=now)
 
+    # ── New pillar inputs ──────────────────────────────────────────
+    health, balance_verdict, figures_by_year, _ratios = _load_financial_inputs(db, company_id)
+    contract_intensity = _load_contract_intensity(db, company_id)
+    payment_reputation = _load_payment_reputation(db, company_id, nip=company.nip)
+    # Governance is computed during the scrape (it's expensive) and persisted
+    # via PersonRiskFlag — we re-derive an aggregate from flags here.
+    governance = _aggregate_governance(db, company_id)
+
+    composite = build_composite(
+        db,
+        company_id,
+        media_verdict=media_verdict,
+        financial_health=health,
+        balance_verdict=balance_verdict,
+        contract_intensity=contract_intensity,
+        payment_reputation=payment_reputation,
+        governance=governance,
+        media_signals_sanctions_active=signals.sanctions_active,
+    )
+
     components: dict[str, Any] = dict(legacy_components)
-    components["verdict"] = verdict.as_dict()
+    components["verdict"] = media_verdict.as_dict()
     components["signals"] = signals.as_dict()
-    components["overall_score"] = verdict.risk_score
-    components["recommendation"] = verdict.recommendation
-    components["recommendation_description"] = verdict.recommendation_description
-    components["confidence"] = verdict.confidence
-    components["status"] = verdict.status
-    components["rationale"] = verdict.rationale
-    components["key_concerns"] = verdict.key_concerns
-    components["key_positives"] = verdict.key_positives
-    components["overrides"] = verdict.overrides
+    components["composite"] = composite.as_dict()
+    components["overall_score"] = composite.composite_score
+    components["recommendation"] = composite.recommendation
+    components["recommendation_description"] = composite.recommendation_description
+    components["confidence"] = media_verdict.confidence
+    components["status"] = media_verdict.status
+    components["rationale"] = media_verdict.rationale
+    components["key_concerns"] = composite.key_concerns or media_verdict.key_concerns
+    components["key_positives"] = composite.key_positives or media_verdict.key_positives
+    components["overrides"] = (media_verdict.overrides or []) + (composite.overrides or [])
     components["legacy"] = {
         "article_reputational_score": round(rep_score_legacy, 2),
         "article_investment_score": round(inv_score_legacy, 2),
@@ -261,23 +404,74 @@ def recalculate_and_persist(
         reverse=True,
     )[:5]
 
-    # ALWAYS persist a snapshot — even if insufficient_evidence, so the company
-    # becomes visible in the ledger with a clear status.
     snap = ScoreHistory(
         company_id=company_id,
-        score=float(verdict.risk_score),
-        investment_score=float(verdict.risk_score),  # unified single score
-        recommendation=verdict.recommendation,
+        score=float(composite.composite_score),
+        investment_score=float(composite.composite_score),
+        recommendation=composite.recommendation,
         score_components=components,
         article_count=int(signals.total_articles),
         ledger_score=float(ledger["score"]),
         active_event_count=int(ledger["active_events"]),
         sanctions_match_count=int(ledger["sanctions_hits"]),
+        composite_score=float(composite.composite_score),
+        financial_score=composite.financial_score,
+        commercial_score=composite.commercial_score,
+        legal_score=composite.legal_score,
+        governance_score=composite.governance_score,
+        media_score=composite.media_score,
     )
     db.add(snap)
     db.commit()
     db.refresh(snap)
     return snap
+
+
+def _aggregate_governance(db: Session, company_id: str) -> Optional[GovernanceResult]:
+    """Rebuild a GovernanceResult from PersonRiskFlag rows persisted during scraping."""
+    from app.models import CompanyPerson, PersonRiskFlag
+
+    people = list(
+        db.scalars(
+            select(CompanyPerson).where(
+                CompanyPerson.company_id == company_id,
+                CompanyPerson.is_active.is_(True),
+            )
+        ).all()
+    )
+    if not people:
+        return None
+    person_ids = [p.id for p in people]
+    flags = list(
+        db.scalars(
+            select(PersonRiskFlag).where(PersonRiskFlag.person_id.in_(person_ids))
+        ).all()
+    )
+    flagged: dict[str, list[dict[str, Any]]] = {}
+    total_severity = 0.0
+    for f in flags:
+        total_severity += float(f.severity or 0.0)
+        flagged.setdefault(f.person_id, []).append(
+            {
+                "kind": f.kind,
+                "other_company_name": f.other_company_name,
+                "severity": float(f.severity or 0.0),
+                "notes": f.notes,
+            }
+        )
+    persons_out: list[dict[str, Any]] = []
+    for p in people:
+        bits = flagged.get(p.id)
+        if bits:
+            persons_out.append({"name": p.full_name, "role": p.role, "flags": bits})
+    score = 25.0 + min(75.0, total_severity * 30.0)
+    return GovernanceResult(
+        score=round(score, 1),
+        flags_count=len(flags),
+        people_checked=len(people),
+        flagged_people=persons_out,
+        notes=f"Sprawdzono {len(people)} osób, {len(flags)} flag.",
+    )
 
 
 def latest_score_for_company(db: Session, company_id: str) -> ScoreHistory | None:

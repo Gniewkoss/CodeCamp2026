@@ -38,6 +38,17 @@ function app() {
     selected: null,
     articles: [],
     articleFilter: "relevant",
+    profileBundle: null,
+    profileTab: "overview",
+    profileTabs: [
+      { id: "overview",    label: "Przegląd",      icon: "📋" },
+      { id: "finance",     label: "Finanse",       icon: "💰" },
+      { id: "contracts",   label: "Kontraktacja",  icon: "📑" },
+      { id: "press",       label: "Prasa",         icon: "📰" },
+      { id: "registry",    label: "Rejestry",      icon: "🏛️" },
+      { id: "governance",  label: "Governance",    icon: "👥" },
+      { id: "ledger",      label: "Ledger",        icon: "📜" },
+    ],
     articleFilters: [
       { id: "relevant", label: "Dotyczą firmy" },
       { id: "all", label: "Wszystkie" },
@@ -61,13 +72,21 @@ function app() {
       resolvedNote: "",
       elapsed: 0,
       steps: [
-        { id: "resolve",   icon: "🧠", label: "Rozpoznanie firmy przez AI",            hint: "Claude szuka oficjalnej nazwy, NIP, KRS i aliasów medialnych",        status: "pending" },
-        { id: "registry",  icon: "🏛️", label: "Rejestry MF / KRS / CEIDG",              hint: "Pobieranie danych prawnych: adres, zarząd, PKD, status VAT",         status: "pending" },
-        { id: "scraping",  icon: "📡", label: "Zbieranie artykułów z sieci",           hint: "Google News, NewsAPI, RSS (pb.pl, bankier, forsal), GDELT",          status: "pending" },
-        { id: "analyzing", icon: "🤖", label: "Analiza AI każdego artykułu",           hint: "Sentyment, red flags, wiarygodność, dopasowanie do spółki",          status: "pending", progress: 0, total: 0 },
-        { id: "events",    icon: "⚖️", label: "Kontrola sankcji i zdarzeń ryzyka",     hint: "UE, OFAC, lista konsolidowana MSW, zdarzenia z KRS",                 status: "pending" },
-        { id: "verdict",   icon: "🎯", label: "Werdykt AI",                            hint: "Claude syntezuje sygnały w jedną rekomendację: PROCEED / CAUTION / AVOID", status: "pending" },
-        { id: "synth",     icon: "📊", label: "SWOT i teza inwestycyjna",              hint: "Drugi pass Claude'a — mocne/słabe strony, szanse, zagrożenia",       status: "pending" },
+        { id: "resolve",    icon: "🧠", label: "Rozpoznanie firmy przez AI",            hint: "Claude szuka oficjalnej nazwy, NIP, KRS i aliasów medialnych",        status: "pending" },
+        { id: "registry",   icon: "🏛️", label: "Rejestry MF / KRS / CEIDG",              hint: "Pobieranie danych prawnych: adres, zarząd, PKD, status VAT",         status: "pending" },
+        { id: "scraping",   icon: "📡", label: "Zbieranie artykułów z sieci",           hint: "Google News, NewsAPI, RSS (pb.pl, bankier, forsal), GDELT",          status: "pending" },
+        { id: "analyzing",  icon: "🤖", label: "Analiza AI każdego artykułu",           hint: "Sentyment, red flags, wiarygodność, dopasowanie do spółki",          status: "pending", progress: 0, total: 0 },
+        { id: "events",     icon: "⚖️", label: "Sankcje UE / OFAC / MSW",               hint: "Lista konsolidowana, ograniczenia eksportowe",                       status: "pending" },
+        { id: "financials", icon: "📊", label: "Sprawozdania finansowe (KRS RDF)",      hint: "3 lata bilansu + rachunek wyników, wskaźniki i Altman/Mączyńska",    status: "pending" },
+        { id: "balance_ai", icon: "🧮", label: "Analiza bilansu 3Y przez Claude",       hint: "Kondycja, red flags, prognoza wypłacalności 12m",                    status: "pending" },
+        { id: "contracts",  icon: "📑", label: "Kontraktacja (TED / BZP / prasa)",      hint: "Aktywne kontrakty, koncentracja klientów, trend YoY",                status: "pending" },
+        { id: "insurance",  icon: "🛡️", label: "Sygnał ubezpieczenia należności",       hint: "Czy firma jest ubezpieczona (Euler, Coface, Atradius...)",           status: "pending" },
+        { id: "payments",   icon: "⏱️", label: "Opinia rynkowa — płatności w terminie", hint: "DPO, zaległości w prasie, opcjonalnie BIG InfoMonitor",              status: "pending" },
+        { id: "governance", icon: "👥", label: "Historia osób z KRS",                   hint: "Claude sprawdza przeszłe bankructwa, dyskwalifikacje zarządu",       status: "pending" },
+        { id: "regulatory", icon: "🏛️", label: "KRS Dział 6 + MSiG / KRZ",              hint: "Bankructwo, restrukturyzacja, likwidacja, postępowania sądowe",      status: "pending" },
+        { id: "limit",      icon: "💳", label: "Limit kupiecki",                        hint: "Rekomendacja limitu kredytu handlowego z korektami ryzyka",          status: "pending" },
+        { id: "verdict",    icon: "🎯", label: "Werdykt AI (composite)",                hint: "5 filarów: Financial > Commercial > Legal > Governance > Media",     status: "pending" },
+        { id: "synth",      icon: "📊", label: "SWOT i teza inwestycyjna",              hint: "Drugi pass Claude'a — mocne/słabe strony, szanse, zagrożenia",       status: "pending" },
       ],
       _timer: null,
     },
@@ -247,15 +266,122 @@ function app() {
     // ── Company detail ────────────────────────────────────────────────
     async openCompany(id) {
       this.view = "company";
+      this.profileTab = "overview";
+      this.profileBundle = null;
       try {
         [this.selected, this.articles] = await Promise.all([
           this.api(`/api/companies/${id}`),
           this.api(`/api/companies/${id}/articles?limit=80`),
         ]);
         this.$nextTick(() => this.renderCompanyChart(id));
+        this.loadProfileBundle(id);
       } catch (e) {
         this.toast("Błąd ładowania spółki: " + e.message, "error");
       }
+    },
+
+    async loadProfileBundle(id) {
+      try {
+        this.profileBundle = await this.api(`/api/companies/${id}/profile-bundle`);
+      } catch (e) {
+        // Non-fatal: the main profile still loads.
+        this.profileBundle = null;
+      }
+    },
+
+    async refreshFinancials() {
+      if (!this.selected) return;
+      this.toast("Odświeżam dane finansowe…", "info", "💰");
+      try {
+        await this.api(`/api/companies/${this.selected.id}/financials/refresh`, { method: "POST" });
+        await this.loadProfileBundle(this.selected.id);
+        this.toast("Dane finansowe zaktualizowane", "success", "✅");
+      } catch (e) {
+        this.toast("Błąd odświeżania: " + e.message, "error");
+      }
+    },
+
+    async refreshContractsEndpoint() {
+      if (!this.selected) return;
+      this.toast("Szukam nowych kontraktów…", "info", "📑");
+      try {
+        await this.api(`/api/companies/${this.selected.id}/contracts/refresh`, { method: "POST" });
+        await this.loadProfileBundle(this.selected.id);
+        this.toast("Kontrakty zaktualizowane", "success", "✅");
+      } catch (e) {
+        this.toast("Błąd: " + e.message, "error");
+      }
+    },
+
+    async refreshGovernanceEndpoint() {
+      if (!this.selected) return;
+      this.toast("Sprawdzam historię osób…", "info", "👥");
+      try {
+        await this.api(`/api/companies/${this.selected.id}/governance/refresh`, { method: "POST" });
+        await this.loadProfileBundle(this.selected.id);
+        this.toast("Governance zaktualizowane", "success", "✅");
+      } catch (e) {
+        this.toast("Błąd: " + e.message, "error");
+      }
+    },
+
+    fmtMoney(v, currency) {
+      if (v == null || isNaN(v)) return "—";
+      const c = currency || "PLN";
+      const n = Number(v);
+      if (Math.abs(n) >= 1_000_000_000) return (n / 1_000_000_000).toFixed(2) + " mld " + c;
+      if (Math.abs(n) >= 1_000_000) return (n / 1_000_000).toFixed(2) + " mln " + c;
+      if (Math.abs(n) >= 1_000) return (n / 1_000).toFixed(1) + " tys. " + c;
+      return n.toFixed(0) + " " + c;
+    },
+
+    fmtRatio(v, digits) {
+      if (v == null || isNaN(v)) return "—";
+      return Number(v).toFixed(digits ?? 2);
+    },
+
+    fmtPercent(v) {
+      if (v == null || isNaN(v)) return "—";
+      return (Number(v) * 100).toFixed(1) + "%";
+    },
+
+    conditionClass(cond) {
+      const c = (cond || "unknown").toLowerCase();
+      if (c === "excellent" || c === "good") return "text-good";
+      if (c === "watch") return "text-warn";
+      if (c === "distress") return "text-danger";
+      return "text-slate-400";
+    },
+
+    dbtLabel(flag) {
+      return ({
+        on_time: "Płaci w terminie",
+        late: "Opóźnia płatności",
+        severely_late: "Poważne zaległości",
+        unknown: "Brak danych",
+      })[flag] || "Brak danych";
+    },
+
+    dbtClass(flag) {
+      if (flag === "on_time") return "text-good";
+      if (flag === "late") return "text-warn";
+      if (flag === "severely_late") return "text-danger";
+      return "text-slate-400";
+    },
+
+    insuranceLabel(state) {
+      return ({
+        known_insured: "Ubezpieczona (potwierdzone)",
+        likely_insured: "Prawdopodobnie ubezpieczona",
+        unknown: "Brak danych",
+        likely_uninsured: "Brak sygnałów ubezpieczenia",
+      })[state] || "Brak danych";
+    },
+
+    insuranceClass(state) {
+      if (state === "known_insured" || state === "likely_insured") return "text-good";
+      if (state === "likely_uninsured") return "text-warn";
+      return "text-slate-400";
     },
 
     // ── Quick lookup (hero) ───────────────────────────────────────────
@@ -429,6 +555,14 @@ function app() {
         registry: "registry",
         analyzing: "analyzing",
         events: "events",
+        financials: "financials",
+        balance_ai: "balance_ai",
+        contracts: "contracts",
+        insurance: "insurance",
+        payments: "payments",
+        governance: "governance",
+        regulatory: "regulatory",
+        limit: "limit",
         verdict: "verdict",
         synth: "synth",
         done: null,

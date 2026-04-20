@@ -241,6 +241,60 @@ def scrape_company_sync(db: Session, company_id: str, *, job: Optional[ScanJob] 
     except Exception as e:
         logger.warning("Sanctions screening skipped: %s", e)
 
+    # ── Financial / commercial / governance pillars ─────────────────────
+    # Each helper enforces its own cooldown, so re-running the scan within
+    # the refresh window will be a no-op for these steps.
+    from app.analysis import financial_pipeline as fp  # local import keeps import graph tidy
+
+    _set_stage(db, job, "financials", "Pobieram sprawozdania finansowe (KRS RDF / wiedza AI)…")
+    try:
+        fp.refresh_financial_statements(db, company)
+        fp.refresh_financial_ratios(db, company)
+    except Exception as e:
+        logger.warning("Financials stage failed: %s", e)
+
+    _set_stage(db, job, "balance_ai", "Claude analizuje bilans ekonomiczny z 3 lat…")
+    try:
+        fp.refresh_balance_ai(db, company)
+    except Exception as e:
+        logger.warning("BalanceAI stage failed: %s", e)
+
+    _set_stage(db, job, "contracts", "Szukam kontraktów publicznych (TED / BZP / prasa)…")
+    try:
+        fp.refresh_contracts(db, company)
+    except Exception as e:
+        logger.warning("Contracts stage failed: %s", e)
+
+    _set_stage(db, job, "insurance", "Badam sygnały ubezpieczenia należności…")
+    try:
+        fp.refresh_insurance(db, company, aliases=list(aliases or []))
+    except Exception as e:
+        logger.warning("Insurance stage failed: %s", e)
+
+    _set_stage(db, job, "payments", "Opinia rynkowa — terminowość płatności…")
+    try:
+        fp.refresh_payments(db, company)
+    except Exception as e:
+        logger.warning("Payments stage failed: %s", e)
+
+    _set_stage(db, job, "governance", "Sprawdzam historię osób z KRS…")
+    try:
+        fp.refresh_governance(db, company)
+    except Exception as e:
+        logger.warning("Governance stage failed: %s", e)
+
+    _set_stage(db, job, "regulatory", "Parsuję KRS Dział 6 i MSiG / KRZ…")
+    try:
+        fp.refresh_regulatory(db, company)
+    except Exception as e:
+        logger.warning("Regulatory stage failed: %s", e)
+
+    _set_stage(db, job, "limit", "Liczę rekomendowany limit kupiecki…")
+    try:
+        fp.refresh_trade_credit_limit(db, company)
+    except Exception as e:
+        logger.warning("Trade credit limit failed: %s", e)
+
     _set_stage(db, job, "verdict", "Claude formułuje ostateczny werdykt z sygnałów i zdarzeń…")
     snap = recalculate_and_persist(db, company_id, lookback_days=90)
 
