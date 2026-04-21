@@ -11,20 +11,16 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite:///./repmonitor.db"
 
-    # LLM provider switch. "openai" is the default because OpenAI's JSON
-    # mode is rock-solid for our structured prompts (governance, financial
-    # extraction, risk analysis) and gpt-4o handles Polish perfectly.
-    # Set to "anthropic" to fall back to Claude.
-    llm_provider: str = "openai"  # "openai" | "anthropic"
+    # LLM provider: "anthropic" (default) | "openai".
+    # When set to anthropic, ``app.llm.active_provider`` does not fall back to
+    # OpenAI — set ANTHROPIC_API_KEY. For OpenAI-only, set LLM_PROVIDER=openai.
+    llm_provider: str = "anthropic"  # "openai" | "anthropic"
 
-    # OpenAI (primary). gpt-4o is the sweet spot: strong Polish, reliable
-    # JSON mode, fast enough for 8-12 parallel calls, and broadly available
-    # on every OpenAI key tier. Swap to "gpt-4.1" / "gpt-5" via env if you
-    # want more horsepower.
+    # OpenAI — optional; use LLM_PROVIDER=openai + OPENAI_API_KEY.
     openai_api_key: Optional[str] = None
     openai_model: str = "gpt-4o"
 
-    # Anthropic Claude (secondary — still supported as a fallback).
+    # Anthropic Claude (default path for this project).
     anthropic_api_key: Optional[str] = None
     anthropic_model: str = "claude-sonnet-4-5"
 

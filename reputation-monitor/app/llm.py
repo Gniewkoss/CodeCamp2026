@@ -1,4 +1,4 @@
-"""Unified LLM wrapper — OpenAI (default) or Anthropic.
+"""Unified LLM wrapper — Anthropic (default) or OpenAI.
 
 All analysis modules call ``llm_complete(system=..., user=..., max_tokens=...)``
 instead of talking to a specific SDK directly. This lets us flip providers
@@ -6,13 +6,11 @@ instead of talking to a specific SDK directly. This lets us flip providers
 
 Routing rules:
 
-* ``settings.llm_provider == "openai"`` → use OpenAI (recommended). Requires
-  ``OPENAI_API_KEY``. Returns ``""`` if the key is missing, so each call site
-  can fall back to its offline heuristic as it did with Claude.
-* ``settings.llm_provider == "anthropic"`` → use Claude. Requires
-  ``ANTHROPIC_API_KEY``.
-* If the selected provider's key is missing but the OTHER provider's key is
-  set, we auto-switch — this is convenient when you only have one key.
+* ``settings.llm_provider == "anthropic"`` → Claude only. Requires
+  ``ANTHROPIC_API_KEY``. No silent fallback to OpenAI.
+* ``settings.llm_provider == "openai"`` → OpenAI when ``OPENAI_API_KEY`` is set;
+  if that key is missing but ``ANTHROPIC_API_KEY`` is set, Claude is used once
+  as a convenience fallback.
 
 JSON mode:
     ``expect_json=True`` (default) enables OpenAI's ``response_format=json_object``
@@ -90,10 +88,13 @@ Provider = Literal["openai", "anthropic", ""]
 def active_provider() -> Provider:
     """Return the provider we can actually talk to, given available keys."""
     s = get_settings()
-    preferred = (s.llm_provider or "openai").lower()
+    preferred = (s.llm_provider or "anthropic").lower()
+    if preferred == "anthropic":
+        return "anthropic" if s.anthropic_api_key else ""
     if preferred == "openai" and s.openai_api_key:
         return "openai"
-    if preferred == "anthropic" and s.anthropic_api_key:
+    # openai preferred but no key — try the other provider once
+    if preferred == "openai" and s.anthropic_api_key:
         return "anthropic"
     if s.openai_api_key:
         return "openai"

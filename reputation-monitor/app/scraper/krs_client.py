@@ -1,5 +1,11 @@
 """Polish National Court Register (KRS) — public REST API.
 
+Dokumentacja usług (odpisy aktualne/pełne, biuletyny zmian):
+https://prs.ms.gov.pl/krs/openApi
+
+Host wywołań: ``https://api-krs.ms.gov.pl`` — bez logowania, zgodnie z art. 4b
+ustawy o KRS i ustawą o otwartych danych.
+
 Besides the raw JSON fetch + heuristic person walk, this module exposes
 :func:`extract_person_signatures`. That function returns per-seat records
 from *Dział 2* with **first-letter + length of the GDPR-masked name**
@@ -22,7 +28,18 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-KRS_BASE = "https://api-krs.ms.gov.pl/api/krs/OdpisAktualny"
+# Oficjalna strona opisu Open API (PRS).
+KRS_OPEN_API_PORTAL = "https://prs.ms.gov.pl/krs/openApi"
+# Bazowy host REST (ten sam zestaw usług co w portalu).
+KRS_API_ROOT = "https://api-krs.ms.gov.pl"
+
+KRS_ODPIS_AKTUALNY = f"{KRS_API_ROOT}/api/krs/OdpisAktualny"
+KRS_ODPIS_PELNY = f"{KRS_API_ROOT}/api/krs/OdpisPelny"
+KRS_BIULETYN_GODZINOWY = f"{KRS_API_ROOT}/api/Krs/BiuletynGodzinowy"
+KRS_BIULETYN_DZIENNY = f"{KRS_API_ROOT}/api/Krs/Biuletyn"
+
+# Zachowana nazwa — historycznie używana w całym projekcie.
+KRS_BASE = KRS_ODPIS_AKTUALNY
 
 
 def normalise_krs(krs: str | None) -> str | None:
@@ -34,16 +51,16 @@ def normalise_krs(krs: str | None) -> str | None:
     return digits.zfill(10)
 
 
-def fetch_krs_odpis_json(krs: str) -> dict[str, Any]:
-    num = normalise_krs(krs)
-    if not num:
-        raise ValueError("Invalid KRS")
-    url = f"{KRS_BASE}/{num}"
-    headers = {"User-Agent": "ReputationMonitor/1.0 (due-diligence demo)"}
-    # KRS API responds with UTF-8 bytes but without a proper `charset` header →
-    # force UTF-8 decoding to avoid Polish-diacritic mojibake ("SPÓŁKA" → "SPA?A?KA").
-    # Try both registers: P=Rejestr Przedsiębiorców, S=Stowarzyszenia.
-    with httpx.Client(timeout=45.0, follow_redirects=True) as client:
+def _fetch_krs_odpis_by_register(
+    base_url: str,
+    krs_num: str,
+    *,
+    timeout: float = 45.0,
+) -> dict[str, Any]:
+    """Pobiera JSON odpisu (aktualny lub pełny) — próbuje rejestr P, potem S."""
+    headers = {"User-Agent": "ReputationMonitor/1.0 (due-diligence demo; +https://prs.ms.gov.pl/krs/openApi)"}
+    url = f"{base_url.rstrip('/')}/{krs_num}"
+    with httpx.Client(timeout=timeout, follow_redirects=True) as client:
         for rejestr in ("P", "S"):
             r = client.get(url, params={"rejestr": rejestr, "format": "json"}, headers=headers)
             if r.status_code == 404:
@@ -55,7 +72,73 @@ def fetch_krs_odpis_json(krs: str) -> dict[str, Any]:
             data = json.loads(body)
             if data:
                 return data
-    raise LookupError(f"KRS {num} not found in P or S register")
+    raise LookupError(f"KRS {krs_num} not found in P or S register")
+
+
+def fetch_krs_odpis_json(krs: str) -> dict[str, Any]:
+    """GET odpis **aktualny** — jak w `OdpisAktualny` na https://prs.ms.gov.pl/krs/openApi ."""
+    num = normalise_krs(krs)
+    if not num:
+        raise ValueError("Invalid KRS")
+    return _fetch_krs_odpis_by_register(KRS_ODPIS_AKTUALNY, num)
+
+
+def fetch_krs_odpis_pelny_json(krs: str) -> dict[str, Any]:
+    """GET odpis **pełny** (`OdpisPelny`) — większy zakres niż odpis aktualny."""
+    num = normalise_krs(krs)
+    if not num:
+        raise ValueError("Invalid KRS")
+    return _fetch_krs_odpis_by_register(KRS_ODPIS_PELNY, num)
+
+
+def fetch_krs_biuletyn_godzinowy(dzien: str, godzina_od: str, godzina_do: str) -> list[str]:
+    """Lista zmian z biuletynu godzinowego (``dzien`` > 2021-12-08, godziny GG 00–23).
+
+    Zwraca tablicę stringów zgodnie z API (modele jak w dokumentacji portalu).
+    """
+    url = f"{KRS_BIULETYN_GODZINOWY}/{dzien}"
+    headers = {"User-Agent": "ReputationMonitor/1.0 (due-diligence demo; +https://prs.ms.gov.pl/krs/openApi)"}
+    with httpx.Client(timeout=60.0, follow_redirects=True) as client:
+        r = client.get(
+            url,
+            params={"godzinaOd": godzina_od, "godzinaDo": godzina_do},
+            headers=headers,
+        )
+        r.raise_for_status()
+        body = r.content.decode("utf-8", errors="replace").strip()
+        if not body:
+            return []
+        data = json.loads(body)
+        if isinstance(data, list):
+            return [str(x) for x in data]
+        return []
+
+
+def fetch_krs_biuletyn_dzienny(dzien: str) -> list[str]:
+    """Lista zmian z biuletynu dziennego dla ``dzien`` (YYYY-MM-DD, późniejszy niż 2021-12-08)."""
+    url = f"{KRS_BIULETYN_DZIENNY}/{dzien}"
+    headers = {"User-Agent": "ReputationMonitor/1.0 (due-diligence demo; +https://prs.ms.gov.pl/krs/openApi)"}
+    with httpx.Client(timeout=60.0, follow_redirects=True) as client:
+        r = client.get(url, headers=headers)
+        r.raise_for_status()
+        body = r.content.decode("utf-8", errors="replace").strip()
+        if not body:
+            return []
+        data = json.loads(body)
+        if isinstance(data, list):
+            return [str(x) for x in data]
+        return []
+
+
+def krs_open_api_service_urls() -> dict[str, str]:
+    """Stałe adresy usług z opisu https://prs.ms.gov.pl/krs/openApi (bez klucza API)."""
+    return {
+        "portal": KRS_OPEN_API_PORTAL,
+        "odpis_aktualny": f"{KRS_ODPIS_AKTUALNY}/{{krs}}?rejestr=P|S&format=json",
+        "odpis_pelny": f"{KRS_ODPIS_PELNY}/{{krs}}?rejestr=P|S&format=json",
+        "biuletyn_godzinowy": f"{KRS_BIULETYN_GODZINOWY}/{{dzien}}?godzinaOd=GG&godzinaDo=GG",
+        "biuletyn_dzienny": f"{KRS_BIULETYN_DZIENNY}/{{dzien}}",
+    }
 
 
 def _as_text(v: Any) -> str:
