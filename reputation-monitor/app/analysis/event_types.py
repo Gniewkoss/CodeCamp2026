@@ -17,6 +17,10 @@ EVENT_TYPES: dict[str, float] = {
     # Sanctions
     "sanctions_match_company": 1.0,
     "sanctions_match_person": 0.85,
+    # Any commercial link to a sanctioned jurisdiction (Russia, Belarus, DPRK,
+    # Iran, Syria, occupied Ukrainian territories). Surfaced from article
+    # analysis + SWIFT / TRADE keywords. Treated as a hard blocker.
+    "sanctioned_jurisdiction_link": 0.98,
     # Financial
     "bankruptcy_filed": 0.9,
     "debt_restructuring": 0.6,

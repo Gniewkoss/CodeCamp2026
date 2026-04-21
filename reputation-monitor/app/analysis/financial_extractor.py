@@ -384,37 +384,27 @@ def _coerce_extracted(data: dict, *, default_source: str, default_confidence: fl
 
 
 def extract_from_text(text: str, *, period_hint: str = "") -> Optional[ExtractedFigures]:
-    """Claude extraction from PDF/HTML text of a sprawozdanie."""
-    settings = get_settings()
-    if not settings.anthropic_api_key or not text:
-        return None
-    try:
-        import anthropic
+    """LLM extraction from PDF/HTML text of a sprawozdanie."""
+    from app.llm import llm_available, llm_complete
 
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-        msg = client.messages.create(
-            model=settings.anthropic_model,
-            max_tokens=1800,
-            system=_EXTRACT_SYSTEM,
-            messages=[
-                {
-                    "role": "user",
-                    "content": (
-                        f"PODPOWIEDŹ OKRESU: {period_hint or '(brak)'}\n\n"
-                        f"TEKST SPRAWOZDANIA:\n{text[:60000]}"
-                    ),
-                }
-            ],
-        )
-        raw = "".join(getattr(b, "text", "") or "" for b in msg.content).strip()
-        data = _extract_json(raw)
-        if not data:
-            logger.info("Claude PDF extract returned non-JSON: %s", raw[:300])
-            return None
-        return _coerce_extracted(data, default_source="CLAUDE_PDF", default_confidence=0.75)
-    except Exception as e:
-        logger.warning("Claude PDF extract failed: %s", e)
+    if not llm_available() or not text:
         return None
+    raw = llm_complete(
+        system=_EXTRACT_SYSTEM,
+        user=(
+            f"PODPOWIEDŹ OKRESU: {period_hint or '(brak)'}\n\n"
+            f"TEKST SPRAWOZDANIA:\n{text[:60000]}"
+        ),
+        max_tokens=1800,
+        purpose="fin_extract_pdf",
+    )
+    if not raw:
+        return None
+    data = _extract_json(raw)
+    if not data:
+        logger.info("LLM PDF extract returned non-JSON: %s", raw[:300])
+        return None
+    return _coerce_extracted(data, default_source="CLAUDE_PDF", default_confidence=0.75)
 
 
 def extract_from_knowledge(
@@ -428,33 +418,28 @@ def extract_from_knowledge(
     """Ask Claude to recall publicly-available figures for a well-known PL company.
 
     Used as the demo/hackathon fallback when no sprawozdanie PDF is attached.
-    Returns an empty list if Claude can't genuinely recall (low-confidence
+    Returns an empty list if the LLM can't genuinely recall (low-confidence
     responses are filtered out here).
     """
-    settings = get_settings()
-    if not settings.anthropic_api_key:
-        return []
-    try:
-        import anthropic
+    from app.llm import llm_available, llm_complete
 
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-        user = {
-            "company": {"name": company_name, "nip": nip, "krs": krs, "sector": sector},
-            "years_requested": years,
-        }
-        msg = client.messages.create(
-            model=settings.anthropic_model,
-            max_tokens=2200,
-            system=_KNOWLEDGE_SYSTEM,
-            messages=[{"role": "user", "content": json.dumps(user, ensure_ascii=False)}],
-        )
-        raw = "".join(getattr(b, "text", "") or "" for b in msg.content).strip()
-        data = _extract_json(raw)
-        if not data:
-            logger.info("Claude knowledge returned non-JSON: %s", raw[:300])
-            return []
-    except Exception as e:
-        logger.warning("Claude knowledge extract failed for %s: %s", company_name, e)
+    if not llm_available():
+        return []
+    user = {
+        "company": {"name": company_name, "nip": nip, "krs": krs, "sector": sector},
+        "years_requested": years,
+    }
+    raw = llm_complete(
+        system=_KNOWLEDGE_SYSTEM,
+        user=json.dumps(user, ensure_ascii=False),
+        max_tokens=2200,
+        purpose="fin_extract_knowledge",
+    )
+    if not raw:
+        return []
+    data = _extract_json(raw)
+    if not data:
+        logger.info("LLM knowledge returned non-JSON: %s", raw[:300])
         return []
 
     out: list[ExtractedFigures] = []

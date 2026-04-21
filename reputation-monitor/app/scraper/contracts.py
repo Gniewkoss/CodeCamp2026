@@ -71,24 +71,28 @@ def fetch_ted(name: str, *, nip: Optional[str] = None, months_back: int = 24, li
     if not terms:
         return []
     cutoff = (datetime.now(timezone.utc) - timedelta(days=30 * months_back)).strftime("%Y%m%d")
+    # TED v3 renamed ``pageNum`` → ``page`` and rejects payloads containing
+    # the legacy field. We also lower the lookup to ``buyer-name`` /
+    # ``winner-name`` which is what the public schema exposes.
+    # TED v3 is extremely picky about ``fields`` — any value not on its
+    # internal whitelist returns 400 and the whole call is wasted. Omitting
+    # ``fields`` entirely returns the default server-side field set, which
+    # is plenty for our downstream parsing (we only read a handful of keys).
     payload = {
-        "query": f"(contracting-party-name=({' OR '.join(terms)}) OR winner-name=({' OR '.join(terms)})) AND publication-date>={cutoff}",
-        "pageNum": 1,
-        "pageSize": min(limit, 100),
-        "fields": [
-            "publication-number",
-            "publication-date",
-            "title",
-            "contract-valuation",
-            "winner-name",
-            "buyer-name",
-            "place-of-performance",
-            "links",
-        ],
+        "query": (
+            f"(buyer-name=({' OR '.join(terms)}) OR winner-name=({' OR '.join(terms)}))"
+            f" AND publication-date>={cutoff}"
+        ),
+        "page": 1,
+        "limit": min(limit, 100),
     }
     try:
         with httpx.Client(timeout=10.0) as client:
-            resp = client.post(TED_API, json=payload)
+            resp = client.post(
+                TED_API,
+                json=payload,
+                headers={"Accept": "application/json", "Content-Type": "application/json"},
+            )
             if resp.status_code >= 400:
                 logger.info("TED %s: %s", resp.status_code, resp.text[:200])
                 return []
@@ -97,11 +101,17 @@ def fetch_ted(name: str, *, nip: Optional[str] = None, months_back: int = 24, li
         logger.info("TED fetch failed: %s", e)
         return []
 
+    # TED v3 returns either ``notices`` (new) or ``results`` (old). Support both.
+    notices = data.get("notices") or data.get("results") or []
     out: list[RawContract] = []
-    for item in (data.get("notices") or [])[:limit]:
+    for item in notices[:limit]:
         pub = _parse_iso_date(item.get("publication-date"))
         val = None
-        vraw = item.get("contract-valuation") or item.get("estimated-value")
+        vraw = (
+            item.get("total-value")
+            or item.get("contract-valuation")
+            or item.get("estimated-value")
+        )
         if isinstance(vraw, dict):
             amount = vraw.get("amount") or vraw.get("value")
             try:
@@ -184,6 +194,13 @@ def fetch_bzp(name: str, *, nip: Optional[str] = None, limit: int = 30) -> list[
             resp = client.get(BZP_API, params=params)
             if resp.status_code >= 400:
                 logger.info("BZP %s: %s", resp.status_code, resp.text[:200])
+                return []
+            # ezamowienia sometimes answers the public list with an HTML
+            # shell (SPA) instead of JSON. We guard that here so the log
+            # doesn't fill with parse-errors.
+            ctype = (resp.headers.get("content-type") or "").lower()
+            if "json" not in ctype:
+                logger.debug("BZP returned non-JSON (%s); skipping.", ctype or "?")
                 return []
             data = resp.json()
     except Exception as e:

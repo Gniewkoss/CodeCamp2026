@@ -28,5 +28,6 @@ lxml>=5.0.0
 # Company name matching
 rapidfuzz>=3.6.0
 
-# LLM — the core of analysis
+# LLM — the core of analysis (both providers supported, see LLM_PROVIDER in .env)
 anthropic>=0.34.0
+openai>=1.40.0

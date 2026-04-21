@@ -17,6 +17,7 @@ from typing import Any, Optional
 
 from app.analysis.risk_lexicon import RISK_CATEGORIES, category_weight, quick_keyword_hints
 from app.config import get_settings
+from app.llm import llm_available, llm_complete
 
 logger = logging.getLogger(__name__)
 
@@ -281,7 +282,9 @@ def analyze_article_with_claude(
     if published_at:
         text_parts.append(f"DATA PUBLIKACJI: {published_at}")
     if content:
-        text_parts.append(content[: settings.max_article_chars])
+        # max_article_chars == 0 means "no truncation" — pass the full body.
+        limit = settings.max_article_chars or 0
+        text_parts.append(content if limit <= 0 else content[:limit])
     article_blob = "\n\n".join(text_parts).strip()
 
     if not article_blob:
@@ -289,52 +292,47 @@ def analyze_article_with_claude(
 
     hint_keywords = quick_keyword_hints(article_blob)
 
-    if not settings.anthropic_api_key:
-        logger.info("Anthropic key missing — using offline fallback analysis.")
+    if not llm_available():
+        logger.info("LLM key missing — using offline fallback analysis.")
         return _fallback_analysis(article_blob, hint_keywords)
 
-    try:
-        import anthropic
-
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-        user_prompt = (
-            f"SPÓŁKA: {company_name}\n"
-            f"ALIASY: {', '.join(aliases or []) or '(brak)'}\n"
-            f"SŁOWA-KLUCZOWE WYKRYTE LOKALNIE (hint, nie ufaj ślepo): "
-            f"{', '.join(hint_keywords) or '(brak)'}\n\n"
-            "Przeanalizuj poniższy artykuł i zwróć dokładnie jeden JSON zgodny ze schematem:\n"
-            f"{_JSON_SCHEMA_HINT}\n\n"
-            "WAŻNE:\n"
-            "• Jeśli artykuł NIE dotyczy tej spółki → mentions_company=false, wszystkie ryzyka 0, credibility_score=0.5.\n"
-            "• FAKE NEWS: uwzględnij domenę źródła, ton, anonimowość źródeł, brak faktów, clickbait.\n"
-            "  Jeśli credibility_score < 0.35 ustaw is_likely_fake=true i severity/investment_risk zredukuj o połowę.\n"
-            "• Renomowane domeny (pb.pl, bankier.pl, wyborcza.biz, rp.pl, forsal.pl, reuters, bloomberg,\n"
-            "  ft.com, wsj.com) → credibility ≥ 0.8 chyba że ton bardzo emocjonalny.\n"
-            "• Pisz summary, key_facts, red_flags, positive_points, credibility_notes PO POLSKU.\n"
-            "• investment_risk oceniaj z perspektywy inwestora / partnera B2B.\n"
-            "• positive_points: konkretne pozytywy (dobre wyniki, kontrakty, ekspansja, nagrody, ESG).\n"
-            "• risk_keywords to krótkie dosłowne fragmenty z tekstu (nie kategorie).\n\n"
-            f"ARTYKUŁ:\n{article_blob}"
-        )
-        msg = client.messages.create(
-            model=settings.anthropic_model,
-            max_tokens=settings.anthropic_max_tokens,
-            system=_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": user_prompt}],
-        )
-        raw = "".join(getattr(b, "text", "") or "" for b in msg.content).strip()
-        data = _extract_json(raw)
-        if not data:
-            logger.warning("Claude returned non-JSON; falling back. Raw: %s", raw[:400])
-            res = _fallback_analysis(article_blob, hint_keywords)
-            res.raw_llm_response = raw
-            return res
-        result = _coerce(data, fallback_keywords=hint_keywords)
-        result.raw_llm_response = json.dumps(data, ensure_ascii=False)
-        return result
-    except Exception as e:
-        logger.warning("Claude call failed (%s) — using offline fallback.", e)
+    user_prompt = (
+        f"SPÓŁKA: {company_name}\n"
+        f"ALIASY: {', '.join(aliases or []) or '(brak)'}\n"
+        f"SŁOWA-KLUCZOWE WYKRYTE LOKALNIE (hint, nie ufaj ślepo): "
+        f"{', '.join(hint_keywords) or '(brak)'}\n\n"
+        "Przeanalizuj poniższy artykuł i zwróć dokładnie jeden JSON zgodny ze schematem:\n"
+        f"{_JSON_SCHEMA_HINT}\n\n"
+        "WAŻNE:\n"
+        "• Jeśli artykuł NIE dotyczy tej spółki → mentions_company=false, wszystkie ryzyka 0, credibility_score=0.5.\n"
+        "• FAKE NEWS: uwzględnij domenę źródła, ton, anonimowość źródeł, brak faktów, clickbait.\n"
+        "  Jeśli credibility_score < 0.35 ustaw is_likely_fake=true i severity/investment_risk zredukuj o połowę.\n"
+        "• Renomowane domeny (pb.pl, bankier.pl, wyborcza.biz, rp.pl, forsal.pl, reuters, bloomberg,\n"
+        "  ft.com, wsj.com) → credibility ≥ 0.8 chyba że ton bardzo emocjonalny.\n"
+        "• Pisz summary, key_facts, red_flags, positive_points, credibility_notes PO POLSKU.\n"
+        "• investment_risk oceniaj z perspektywy inwestora / partnera B2B.\n"
+        "• positive_points: konkretne pozytywy (dobre wyniki, kontrakty, ekspansja, nagrody, ESG).\n"
+        "• risk_keywords to krótkie dosłowne fragmenty z tekstu (nie kategorie).\n\n"
+        f"ARTYKUŁ:\n{article_blob}"
+    )
+    raw = llm_complete(
+        system=_SYSTEM_PROMPT,
+        user=user_prompt,
+        max_tokens=settings.llm_max_tokens,
+        purpose="article_analysis",
+    )
+    if not raw:
         return _fallback_analysis(article_blob, hint_keywords)
+
+    data = _extract_json(raw)
+    if not data:
+        logger.warning("LLM returned non-JSON; falling back. Raw: %s", raw[:400])
+        res = _fallback_analysis(article_blob, hint_keywords)
+        res.raw_llm_response = raw
+        return res
+    result = _coerce(data, fallback_keywords=hint_keywords)
+    result.raw_llm_response = json.dumps(data, ensure_ascii=False)
+    return result
 
 
 # ───────────────────────────────────────────────────────────────────────
@@ -412,37 +410,31 @@ def synthesize_company_insights(
             }
         )
 
-    if not settings.anthropic_api_key:
+    if not llm_available():
         return _fallback_insights(company_name, slim)
 
-    try:
-        import anthropic
-
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-        prompt = (
-            f"SPÓŁKA: {company_name}\n"
-            f"SEKTOR: {sector or '(nieznany)'}\n\n"
-            f"Liczba artykułów do syntezy: {len(slim)}\n\n"
-            "DANE WEJŚCIOWE (JSON — wyniki analizy poszczególnych artykułów, w tym ocena wiarygodności):\n"
-            f"{json.dumps(slim, ensure_ascii=False)[:18000]}\n\n"
-            "Zwróć JSON zgodny ze schematem:\n"
-            f"{_SYNTH_SCHEMA}\n"
-        )
-        msg = client.messages.create(
-            model=settings.anthropic_model,
-            max_tokens=settings.anthropic_max_tokens,
-            system=_SYNTH_SYSTEM,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        raw = "".join(getattr(b, "text", "") or "" for b in msg.content).strip()
-        data = _extract_json(raw)
-        if not data:
-            logger.warning("Synth: non-JSON result, using fallback. Raw: %s", raw[:400])
-            return _fallback_insights(company_name, slim)
-        return _coerce_insights(data)
-    except Exception as e:
-        logger.warning("Synth call failed (%s) — using fallback.", e)
+    prompt = (
+        f"SPÓŁKA: {company_name}\n"
+        f"SEKTOR: {sector or '(nieznany)'}\n\n"
+        f"Liczba artykułów do syntezy: {len(slim)}\n\n"
+        "DANE WEJŚCIOWE (JSON — wyniki analizy poszczególnych artykułów, w tym ocena wiarygodności):\n"
+        f"{json.dumps(slim, ensure_ascii=False)[:18000]}\n\n"
+        "Zwróć JSON zgodny ze schematem:\n"
+        f"{_SYNTH_SCHEMA}\n"
+    )
+    raw = llm_complete(
+        system=_SYNTH_SYSTEM,
+        user=prompt,
+        max_tokens=settings.llm_max_tokens,
+        purpose="insights_synthesis",
+    )
+    if not raw:
         return _fallback_insights(company_name, slim)
+    data = _extract_json(raw)
+    if not data:
+        logger.warning("Synth: non-JSON result, using fallback. Raw: %s", raw[:400])
+        return _fallback_insights(company_name, slim)
+    return _coerce_insights(data)
 
 
 def _coerce_insights(data: dict) -> CompanyInsights:
@@ -553,27 +545,20 @@ def resolve_company_identity(query: str) -> Optional[ResolvedIdentity]:
     if not q:
         return None
 
-    settings = get_settings()
-    if not settings.anthropic_api_key:
+    if not llm_available():
         return None
 
-    try:
-        import anthropic
-
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-        msg = client.messages.create(
-            model=settings.anthropic_model,
-            max_tokens=600,
-            system=_IDENTITY_SYSTEM,
-            messages=[{"role": "user", "content": f"QUERY: {q}"}],
-        )
-        raw = "".join(getattr(b, "text", "") or "" for b in msg.content).strip()
-        data = _extract_json(raw)
-        if not data:
-            logger.info("Identity resolver — non-JSON reply for %r: %s", q, raw[:200])
-            return None
-    except Exception as e:
-        logger.warning("Identity resolver call failed (%s): %s", q, e)
+    raw = llm_complete(
+        system=_IDENTITY_SYSTEM,
+        user=f"QUERY: {q}",
+        max_tokens=600,
+        purpose="identity_resolver",
+    )
+    if not raw:
+        return None
+    data = _extract_json(raw)
+    if not data:
+        logger.info("Identity resolver — non-JSON reply for %r: %s", q, raw[:200])
         return None
 
     canonical = (data.get("canonical_name") or "").strip()

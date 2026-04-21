@@ -86,7 +86,9 @@ def calculate_company_score(db: Session, company_id: str, as_of: datetime | None
         )
 
     raw_score = sum(e["contribution"] for e in event_contributions)
-    sanctions_hits = [e for e in visible if e.event_type and "sanctions" in e.event_type]
+    sanctions_hits = [
+        e for e in visible if e.event_type and "sanction" in e.event_type
+    ]
     normalized = min(100.0, raw_score * 20.0)
     # Sanctions floor on the 0–100 scale (spec intent: always high risk if listed).
     if sanctions_hits:

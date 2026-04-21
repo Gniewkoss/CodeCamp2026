@@ -198,6 +198,10 @@ class CompanyPerson(Base):
     start_date: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     end_date: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     is_active: Mapped[bool] = mapped_column(default=True)
+    # KRS | CEIDG_V2 | claude_knowledge | manual
+    source: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, default="KRS")
+    confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # 0..1, for AI-derived rows
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     company: Mapped["Company"] = relationship(back_populates="persons")
 

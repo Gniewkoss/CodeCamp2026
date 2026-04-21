@@ -153,31 +153,24 @@ Zasady:
 
 
 def _ask_claude(company_name: str, sector: Optional[str] = None) -> Optional[InsuranceDetection]:
-    settings = get_settings()
-    if not settings.anthropic_api_key:
+    from app.llm import llm_available, llm_complete
+
+    if not llm_available():
+        return None
+    raw = llm_complete(
+        system=_KNOWLEDGE_SYSTEM,
+        user=json.dumps({"company": company_name, "sector": sector}, ensure_ascii=False),
+        max_tokens=500,
+        purpose="insurance_detector",
+    )
+    if not raw:
+        return None
+    m = re.search(r"\{[\s\S]*\}", raw)
+    if not m:
         return None
     try:
-        import anthropic
-
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-        msg = client.messages.create(
-            model=settings.anthropic_model,
-            max_tokens=500,
-            system=_KNOWLEDGE_SYSTEM,
-            messages=[
-                {
-                    "role": "user",
-                    "content": json.dumps({"company": company_name, "sector": sector}, ensure_ascii=False),
-                }
-            ],
-        )
-        raw = "".join(getattr(b, "text", "") or "" for b in msg.content).strip()
-        m = re.search(r"\{[\s\S]*\}", raw)
-        if not m:
-            return None
         data = json.loads(m.group())
-    except Exception as e:
-        logger.info("Insurance Claude call failed: %s", e)
+    except json.JSONDecodeError:
         return None
 
     valid_states = {"known_insured", "likely_insured", "unknown", "likely_uninsured"}

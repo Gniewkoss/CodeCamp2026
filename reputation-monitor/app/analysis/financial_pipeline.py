@@ -22,6 +22,7 @@ from app.analysis.contract_intensity import compute_contract_intensity
 from app.analysis.financial_extractor import (
     ExtractedFigures,
     extract_from_knowledge,
+    extract_from_text,
 )
 from app.analysis.financial_metrics import (
     RatiosPack,
@@ -91,23 +92,47 @@ def refresh_financial_statements(db: Session, company: Company, *, force: bool =
 
     extracted_years: list[ExtractedFigures] = []
 
-    # (1) KRS RDF best-effort.
+    # (1) PRS RDF przegladarka — the official KRS financial-statements portal.
+    # Downloads up to `years` of e-SF filings (XHTML / PDF / XML) and pushes
+    # each period's text through the LLM extractor. This replaces the old
+    # ekrs.ms.gov.pl/rdf scraper, which was decommissioned in 2025.
     if company.krs:
         try:
-            from app.scraper.krs_rdf import polite_list_statements
+            from app.scraper.prs_scraper import fetch_financial_documents
 
-            rdf_list = polite_list_statements(company.krs, max_statements=3)
+            prs = fetch_financial_documents(
+                company.krs, years=3, include_consolidated=True
+            )
         except Exception as e:
-            logger.info("KRS RDF list failed: %s", e)
-            rdf_list = []
-        for ref in rdf_list:
-            # We only persist a shell FinancialStatement row here — deterministic
-            # figure extraction from the downloaded binary is intentionally left
-            # as a future enhancement.  The figures will be filled via Claude
-            # knowledge below for well-known companies.
-            pass  # noqa
+            logger.info("PRS fetch failed: %s", e)
+            prs = None
 
-    # (2) Fallback: Claude knowledge for well-known firms.
+        if prs and prs.text_by_period:
+            logger.info(
+                "PRS RDF: %s → %d periods with extractable text (%s)",
+                company.krs, len(prs.text_by_period),
+                ", ".join(prs.periods_with_text),
+            )
+            for period in prs.periods_with_text:
+                text = prs.text_by_period.get(period) or ""
+                if len(text) < 500:
+                    continue
+                try:
+                    fig = extract_from_text(text, period_hint=period)
+                except Exception as e:
+                    logger.info("PRS extract_from_text failed for %s: %s", period, e)
+                    continue
+                if fig is None:
+                    continue
+                # Stamp provenance + force the period we know from RDF
+                # (the LLM sometimes infers it wrong from mid-document text).
+                fig.period_end = period
+                fig.source = "PRS_RDF"
+                extracted_years.append(fig)
+        elif prs and prs.error:
+            logger.info("PRS RDF: %s → no text (%s)", company.krs, prs.error)
+
+    # (2) Fallback: LLM knowledge for well-known firms.
     if not extracted_years:
         try:
             extracted_years = extract_from_knowledge(
@@ -118,7 +143,7 @@ def refresh_financial_statements(db: Session, company: Company, *, force: bool =
                 years=3,
             )
         except Exception as e:
-            logger.info("Claude knowledge extract failed: %s", e)
+            logger.info("LLM knowledge extract failed: %s", e)
             extracted_years = []
 
     if not extracted_years:

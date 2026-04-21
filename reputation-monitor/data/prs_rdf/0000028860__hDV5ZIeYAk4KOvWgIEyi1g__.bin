@@ -1,0 +1,1208 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="pl" xml:lang="pl">
+  <head>
+    <meta http-equiv="content-type" content="text/html;charset=utf-8" />
+    <title>
+      Sprawozdanie biegłego rewidenta z badania sprawozdania finansowego
+    </title>
+    <style type="text/css">
+      body {
+        width: 210mm;
+        height: 100%;
+        margin: 0mm;
+        font-size: 12pt;
+        background: rgb(160, 160, 160);
+      }
+      * {
+        margin: 0;
+        box-sizing: border-box;
+        -moz-box-sizing: border-box;
+      }
+      .main-page {
+        width: 210mm;
+        height: 292mm;
+        margin: 10mm 0mm;
+        background: white;
+        box-shadow: 0 0 0.5cm rgba(0, 0, 0, 0.5);
+      }
+      .header-block {
+        padding-top: 4mm;
+        margin: 0mm 18mm 5mm;
+        height: 30mm;
+      }
+      .sub-page {
+        padding: 0mm;
+        margin: 0mm 18mm 0mm;
+        height: 222mm;
+      }
+      .footer-block {
+        margin: 0mm 18mm;
+        height: 27mm;
+      }
+      .header-block2 {
+        padding-top: 5mm;
+        margin: 0mm 18mm 2mm;
+        height: 16mm;
+      }
+      .sub-page2 {
+        padding: 0mm;
+        margin: 0mm 18mm;
+        height: 255mm;
+      }
+      .footer-block2 {
+        padding: 0mm;
+        margin: 5mm 18mm;
+        height: 10mm;
+      }
+      @media print {
+        @page {
+          size: A4;
+          margin: 0;
+        }
+        html,
+        body {
+          width: 210mm;
+          height: 297mm;
+        }
+        .main-page {
+          margin: 0mm 0mm;
+          border: initial;
+          border-radius: initial;
+          width: initial;
+          min-height: initial;
+          box-shadow: initial;
+          background: initial;
+          page-break-after: always;
+        }
+        .non-print {
+          display: none !important;
+        }
+      }
+      table.table1 {
+        border-collapse: collapse;
+        border-spacing: 0;
+        empty-cells: show;
+        width: 100%;
+        table-layout: fixed;
+        border-color: black;
+        border-width: 3px 0px 1px;
+        border-style: solid none none;
+      }
+      table.table1 th {
+        padding: 5px;
+        vertical-align: top;
+        text-align: center;
+        font-size: 10pt;
+        border: 1px black;
+        border-style: solid none;
+      }
+      table.table1 td {
+        padding: 5px;
+        vertical-align: top;
+        font-size: 10pt;
+        border: 1px black;
+        border-style: solid none none;
+      }
+      table.table2 {
+        border-collapse: collapse;
+        border-spacing: 0;
+        empty-cells: show;
+        width: 100%;
+        table-layout: fixed;
+      }
+      table.table2 th {
+        padding: 5px;
+        vertical-align: top;
+        text-align: center;
+        font-size: 10pt;
+      }
+      table.table2 td {
+        padding: 5px;
+        vertical-align: top;
+        font-size: 10pt;
+      }
+      h1,
+      h2,
+      h3,
+      h4,
+      h5,
+      h6 {
+        clear: both;
+      }
+      ol,
+      ul {
+        margin-top: 0.03in;
+        margin-bottom: 0in;
+        padding: 0;
+      }
+      ul li {
+        list-style: "- ";
+        margin: 0;
+        padding: 0;
+        margin-bottom: 0.7mm;
+      }
+      li span {
+        clear: both;
+        line-height: 0;
+        width: 0;
+        height: 0;
+        margin: 0;
+        padding: 0;
+      }
+      span.footnodeNumber {
+        padding-right: 1em;
+      }
+      span.annotation_style_by_filter {
+        font-size: 95%;
+        font-family: Calibri light;
+        background-color: #fff000;
+        margin: 0;
+        border: 0;
+        padding: 0;
+      }
+      em {
+        font-style: italic;
+      }
+      html,
+      body {
+        max-width: 8in;
+        vertical-align: middle;
+      }
+      html {
+        height: 100%;
+        display: table;
+        margin-top: 2%;
+        margin-bottom: 2%;
+        margin-left: auto;
+        margin-right: auto;
+      }
+      body {
+        display: table-cell;
+      }
+      .brsmall {
+        display: block;
+        margin-bottom: -0.1em;
+      }
+      .PB1 {
+        font-size: 9pt;
+        line-height: 107%;
+        margin-bottom: 0.05in;
+        margin-left: 0in;
+        margin-right: 0in;
+        margin-top: 0.2in;
+        text-align: right !important;
+        text-indent: 0in;
+        font-family: Calibri light;
+        vertical-align: top;
+        writing-mode: horizontal-tb;
+      }
+      .H1 {
+        font-size: 7pt;
+        line-height: 107%;
+        margin-bottom: 0in;
+        margin-left: 30%;
+        margin-right: 0in;
+        margin-top: 0in;
+        text-align: left !important;
+        text-indent: 0in;
+        font-family: Calibri light;
+        vertical-align: top;
+        writing-mode: horizontal-tb;
+        white-space: pre-line;
+      }
+      .H2 {
+        font-size: 7pt;
+        color: gray;
+        line-height: 102%;
+        margin-bottom: 0.1in;
+        margin-left: 0in;
+        margin-right: 0in;
+        margin-top: 0in;
+        text-align: justify !important;
+        text-indent: 0in;
+        font-family: Calibri light;
+        vertical-align: top;
+        writing-mode: horizontal-tb;
+        white-space: normal;
+      }
+      .S1 {
+        font-size: 10pt;
+        line-height: 107%;
+        margin-bottom: 0.021in;
+        margin-left: 0in;
+        margin-right: 0in;
+        margin-top: 0.05in;
+        text-align: justify !important;
+        text-indent: 0in;
+        font-family: Calibri light;
+        vertical-align: top;
+        writing-mode: horizontal-tb;
+        white-space: normal;
+      }
+      .P1 {
+        font-size: 10pt;
+        line-height: 107%;
+        margin-bottom: 0.021in;
+        margin-left: 0in;
+        margin-right: 0in;
+        margin-top: 0.05in;
+        text-align: justify !important;
+        text-indent: 0in;
+        font-family: Calibri light;
+        vertical-align: top;
+        writing-mode: horizontal-tb;
+        white-space: normal;
+      }
+      .P2 {
+        font-size: 10pt;
+        line-height: 107%;
+        margin-bottom: 0.021in;
+        margin-left: 0in;
+        margin-right: 0in;
+        margin-top: 0.15in;
+        text-align: left !important;
+        text-indent: 0in;
+        font-family: Calibri light;
+        vertical-align: top;
+        writing-mode: horizontal-tb;
+        font-weight: bold;
+      }
+      .P3 {
+        font-size: 10pt;
+        line-height: 107%;
+        margin-bottom: 0.041in;
+        margin-left: 0in;
+        margin-right: 0in;
+        margin-top: 0.05in;
+        text-align: center !important;
+        text-indent: 0in;
+        font-family: Calibri light;
+        vertical-align: top;
+        writing-mode: horizontal-tb;
+        font-weight: bold;
+      }
+      .C1 {
+        font-size: 10pt;
+        line-height: 107%;
+        font-style: italic;
+        margin-bottom: 0.021in;
+        margin-left: 0in;
+        margin-right: 0in;
+        margin-top: 0.05in;
+        text-align: justify !important;
+        text-indent: 0in;
+        font-family: Calibri light;
+        vertical-align: top;
+        writing-mode: horizontal-tb;
+        white-space: normal;
+      }
+      .L1 {
+        font-size: 10pt;
+        line-height: 107%;
+        margin-bottom: 0.051in;
+        margin-left: 0.25in;
+        margin-right: 0in;
+        margin-top: 0in;
+        text-align: justify !important;
+        text-indent: 0in;
+        font-family: Calibri light;
+        vertical-align: top;
+        writing-mode: horizontal-tb;
+      }
+      .L1T {
+        font-size: 10pt;
+        line-height: 107%;
+        margin-bottom: 0.051in;
+        margin-left: 0.15in;
+        margin-right: 0in;
+        margin-top: 0.03in;
+        text-align: justify !important;
+        text-indent: 0in;
+        font-family: Calibri light;
+        vertical-align: top;
+        writing-mode: horizontal-tb;
+        white-space: normal;
+      }
+      .L2 {
+        font-size: 10pt;
+        line-height: 107%;
+        margin-bottom: 0.051in;
+        margin-left: 0.3in;
+        margin-right: 0in;
+        margin-top: 0in;
+        text-align: justify !important;
+        text-indent: 0in;
+        font-family: Calibri light;
+        vertical-align: top;
+        writing-mode: horizontal-tb;
+      }
+      .L2T li {
+        font-size: 9pt;
+        line-height: 107%;
+        list-style-type: lower-alpha;
+        margin-left: 0.28in;
+        margin-right: 0in;
+        margin-top: 0in;
+        text-align: justify !important;
+        text-indent: 0in;
+        font-family: Calibri light;
+        vertical-align: top;
+        writing-mode: horizontal-tb;
+      }
+      .T1 {
+        font-size: 10pt;
+        line-height: 107%;
+        margin-bottom: 0.051in;
+        margin-left: 0in;
+        margin-right: 0in;
+        margin-top: 0in;
+        text-align: justify !important;
+        text-indent: 0in;
+        font-family: Calibri light;
+        vertical-align: top;
+        writing-mode: horizontal-tb;
+      }
+      .N1 {
+        font-size: 10pt;
+        font-style: italic;
+        line-height: 107%;
+        margin-bottom: 0.051in;
+        margin-left: 0in;
+        margin-right: 0in;
+        margin-top: 0in;
+        text-align: justify !important;
+        text-indent: 0in;
+        font-family: Calibri light;
+        vertical-align: top;
+        writing-mode: horizontal-tb;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="main-page">
+      <div class="header-block">
+        <table class="table2">
+          <tr>
+            <td>
+              <img
+                src="data:image/png; base64,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&#xA;&#xA;"
+                alt="Deloitte-logo"
+                style="width: 54mm; height: 10mm"
+              />
+            </td>
+            <td>
+              <p class="H1">Deloitte Audyt</p>
+              <p class="H1">Spółka z ograniczoną odpowiedzialnością Sp. k.</p>
+              <p class="H1">al. Jana Pawła II 22</p>
+              <p class="H1">00-133 Warszawa</p>
+              <p class="H1">Polska</p>
+              <br />
+              <p class="H1">Tel.: +48 22 511 08 11</p>
+              <p class="H1">Fax.: +48 22 511 08 13</p>
+              <p class="H1">www.deloitte.com/pl</p>
+            </td>
+          </tr>
+        </table>
+        <br />
+      </div>
+      <div class="sub-page">
+        <br />
+        <p class="P3">SPRAWOZDANIE NIEZALEŻNEGO BIEGŁEGO REWIDENTA Z BADANIA</p>
+        <br /><br />
+        <p class="P2">
+          Dla Walnego Zgromadzenia Akcjonariuszy i Rady Nadzorczej Polskiego
+          Koncernu Naftowego ORLEN S.A.
+        </p>
+        <br />
+        <p class="P2">
+          Sprawozdanie z badania rocznego sprawozdania finansowego
+        </p>
+        <br />
+        <p class="P2">Opinia</p>
+        <p class="P1">
+          Przeprowadziliśmy badanie rocznego sprawozdania finansowego Polskiego
+          Koncernu Naftowego ORLEN S.A. („Spółka”), które zawiera jednostkowe
+          sprawozdanie z sytuacji finansowej na dzień 31 grudnia 2022 r.
+          oraz jednostkowe sprawozdanie z zysków lub strat i innych całkowitych
+          dochodów, jednostkowe sprawozdanie ze zmian w kapitale własnym,
+          jednostkowe sprawozdanie z przepływów pieniężnych za rok zakończony w
+          tym dniu oraz informację dodatkową zawierającą opis przyjętych zasad
+          rachunkowości i inne informacje objaśniające („sprawozdanie
+          finansowe”).
+        </p>
+        <br />
+        <p class="P1">Naszym zdaniem sprawozdanie finansowe:</p>
+        <ul>
+          <li class="L1">
+            przedstawia rzetelny i jasny obraz sytuacji majątkowej i finansowej
+            Spółki na dzień 31 grudnia 2022 r. oraz jej wyniku finansowego i
+            przepływów pieniężnych za rok obrotowy zakończony w tym dniu,
+            zgodnie z mającymi zastosowanie Międzynarodowymi Standardami
+            Sprawozdawczości Finansowej zatwierdzonymi przez Unię Europejską
+            („MSSF”) oraz przyjętymi zasadami (polityką) rachunkowości;
+          </li>
+          <li class="L1">
+            jest zgodne co do formy i treści z obowiązującymi Spółkę przepisami
+            prawa oraz jej statutem;
+          </li>
+          <li class="L1">
+            zostało sporządzone na podstawie prawidłowo prowadzonych ksiąg
+            rachunkowych zgodnie z przepisami rozdziału 2 ustawy z dnia
+            29 września 1994 r. o rachunkowości („Ustawa o rachunkowości” -
+            Dz.U. z 2023 r., poz. 120 z późn. zm.).
+          </li>
+        </ul>
+        <br />
+        <p class="P1">
+          Niniejsza opinia jest spójna ze sprawozdaniem dodatkowym dla Komitetu
+          Audytu, które wydaliśmy dnia 27 kwietnia 2023 roku.
+        </p>
+        <br />
+        <p class="P2">Podstawa opinii</p>
+        <p class="P1">
+          <span
+            >Nasze badanie przeprowadziliśmy zgodnie z Krajowymi Standardami
+            Badania („KSB”) w brzmieniu Międzynarodowych Standardów Badania
+            przyjętymi przez Krajową Radę Biegłych Rewidentów oraz stosownie
+            do ustawy z dnia 11 maja 2017 r. o biegłych rewidentach, firmach
+            audytorskich i nadzorze publicznym („Ustawa o biegłych rewidentach”
+            – Dz. U. z 2022 r., poz. 1302 z późn. zm.) oraz Rozporządzenia UE nr
+            537/2014 z dnia 16 kwietnia 2014 r. w sprawie szczegółowych wymogów
+            dotyczących ustawowych badań sprawozdań finansowych jednostek
+            interesu publicznego („Rozporządzenie UE” – Dz. U. UE L158 z późn.
+            zm.). Nasza odpowiedzialność zgodnie z tymi standardami została
+            dalej opisana w sekcji naszego sprawozdania </span
+          ><span style="font-style: italic"
+            >Odpowiedzialność biegłego rewidenta za badanie sprawozdania
+            finansowego</span
+          ><span>. </span>
+        </p>
+        <br />
+        <p class="P1">
+          Jesteśmy niezależni od Spółki zgodnie z zasadami etyki zawodowej
+          określonymi w przyjętym przez Krajową Radę Biegłych Rewidentów
+          Międzynarodowym Kodeksie etyki zawodowych księgowych (w tym
+          Międzynarodowe standardy niezależności) („Kodeks etyki”) opracowanym i
+          zatwierdzonym przez Radę Międzynarodowych Standardów Etycznych dla
+          Księgowych oraz z innymi wymogami etycznymi, które mają zastosowanie
+          do badania sprawozdań finansowych w Polsce. Wypełniliśmy nasze inne
+          obowiązki etyczne zgodnie z tymi wymogami i Kodeksem etyki. W trakcie
+          przeprowadzania badania kluczowy biegły rewident oraz firma audytorska
+          pozostali niezależni od Spółki zgodnie z wymogami niezależności
+          określonymi w Ustawie o biegłych rewidentach oraz w Rozporządzeniu UE.
+        </p>
+        <br />
+        <p class="P1">
+          Uważamy, że dowody badania, które uzyskaliśmy są wystarczające i
+          odpowiednie, aby stanowić podstawę dla naszej opinii.
+        </p>
+      </div>
+      <div class="footer-block">
+        <p class="H2">
+          Nazwa Deloitte odnosi się do jednej lub kilku jednostek Deloitte
+          Touche Tohmatsu Limited, prywatnego podmiotu prawa brytyjskiego z
+          ograniczoną odpowiedzialnością i jego firm członkowskich, które
+          stanowią oddzielne i niezależne podmioty prawne. Dokładny opis
+          struktury prawnej Deloitte Touche Tohmatsu Limited oraz jego firm
+          członkowskich można znaleźć na stronie www.deloitte.com/pl/onas
+        </p>
+        <p class="H2">Member of Deloitte Touche Tohmatsu Limited</p>
+        <p class="H2">
+          Sąd Rejonowy m. st. Warszawy, XII Wydział Gospodarczy Krajowego
+          Rejestru Sądowego, KRS 0000446833, NIP: 527-020-07-86, REGON:
+          010076870
+        </p>
+      </div>
+    </div>
+    <div class="main-page">
+      <div class="header-block2">
+        <img
+          src="data:image/png; base64,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&#xA;&#xA;"
+          alt="Deloitte-logo"
+          style="width: 54mm; height: 10mm"
+        />
+      </div>
+      <div class="sub-page2">
+        <br />
+        <p class="P2">Objaśnienie ze zwróceniem uwagi</p>
+        <p class="P1">
+          Zwracamy uwagę na notę 8 do jednostkowego sprawozdania finansowego, w
+          której opisano dokonaną przez Zarząd ocenę faktycznego i potencjalnego
+          wpływu skutków konfliktu zbrojnego między Ukrainą a Rosją na
+          działalność Spółki. Nasza opinia nie zawiera zastrzeżenia w
+          odniesieniu do tej sprawy.
+        </p>
+        <br />
+        <p class="P2">Kluczowe sprawy badania</p>
+        <p class="P1">
+          Kluczowe sprawy badania są to sprawy, które według naszego zawodowego
+          osądu były najbardziej znaczące podczas badania sprawozdania
+          finansowego za bieżący rok obrotowy. Obejmują one najbardziej znaczące
+          ocenione rodzaje ryzyka istotnego zniekształcenia, w tym ocenione
+          rodzaje ryzyka istotnego zniekształcenia spowodowanego oszustwem. Do
+          spraw tych odnieśliśmy się w kontekście naszego badania sprawozdania
+          finansowego jako całości oraz przy formułowaniu naszej opinii oraz
+          podsumowaliśmy naszą reakcję na te rodzaje ryzyka, a w przypadkach, w
+          których uznaliśmy za stosowne przedstawiliśmy najważniejsze
+          spostrzeżenia związane z tymi rodzajami ryzyka. Nie wyrażamy osobnej
+          opinii na temat tych spraw.
+        </p>
+        <br />
+        <table class="table1">
+          <tr class="T1">
+            <th><p>Kluczowa sprawa badania</p></th>
+            <th><p>Jak nasze badanie odniosło się do tej sprawy</p></th>
+          </tr>
+          <tr class="T1">
+            <td colspan="2" style="font-style: italic">
+              <p>
+                Odzyskiwalność wartości księgowej akcji i udziałów w jednostkach
+                zależnych i współkontrolowanych
+              </p>
+            </td>
+          </tr>
+          <tr class="T1">
+            <td>
+              <p>
+                Spółka posiada istotne inwestycje w jednostkach zależnych
+                i współkontrolowanych, w stosunku do których w poprzednich
+                latach dokonano odpisów aktualizujących.
+              </p>
+              <br />
+              <p>
+                Historycznie wartość odpisów aktualizujących ulegała znaczącym
+                wahaniom w zależności od zmieniających się warunków
+                zewnętrznych, w tym parametrów makroekonomicznych,
+                jak i wewnętrznych decyzji strategicznych Spółki co do nowych
+                celów finansowych i operacyjnych.
+              </p>
+              <br />
+              <p>
+                W wyniku przeprowadzonych analiz przesłanek utraty wartości i w
+                konsekwencji przeprowadzonych testów na dzień 31 grudnia
+                2022 roku Zarząd Spółki dokonał odwrócenia odpisów
+                aktualizujących netto (odwrócenia oraz zawiązania) utraty
+                wartości akcji i udziałów w jednostkach zależnych
+                i współkontrolowanych na łączną kwotę 312 mln PLN (nota
+                13.4.4.1).
+              </p>
+              <br />
+              <p>
+                Jako kluczowy obszar badania uznaliśmy istotne szacunki Zarządu
+                Spółki przyjęte w modelach zdyskontowanych przepływów
+                pieniężnych, będących podstawą do określenia wartości
+                odzyskiwanej udziałów i akcji w jednostkach zależnych i
+                współkontrolowanych, a w szczególności kluczowe założenia
+                makroekonomiczne, jak również przyjęte stopy dyskonta.
+              </p>
+            </td>
+            <td>
+              <p>Nasze procedury badania obejmowały w szczególności:</p>
+              <ul class="L1T">
+                <li>
+                  zrozumienie środowiska kontroli wewnętrznej w zakresie procesu
+                  oszacowania podstawy do ujęcia utraty wartości akcji i
+                  udziałów w jednostkach zależnych i współkontrolowanych, dla
+                  których zidentyfikowano przesłanki do utraty wartości;
+                </li>
+                <li>
+                  krytyczną ocenę przyjętych przez Zarząd Spółki kluczowych
+                  założeń i szacunków uwzględniających specyfikę działalności
+                  poszczególnych spółek zależnych, co do wyliczenia przyszłych
+                  oczekiwanych przepływów pieniężnych, w tym:
+                  <ul class="L1T">
+                    <li>
+                      porównanie przyjętych założeń co do przyszłych przepływów
+                      z zatwierdzonym planem finansowym dla 2023 roku;
+                    </li>
+                    <li>
+                      krytyczną analizę wypracowanych przez Zarząd Spółki
+                      kluczowych długoterminowych założeń makroekonomicznych, w
+                      tym prognozowanych cen paliw, marż rafineryjnych
+                      i petrochemicznych, marż produktowych, cen praw do emisji
+                      CO2, inflacji, kursów walutowych przyjętych przez Spółkę
+                      oraz powiązania założeń z raportami niezależnych agencji
+                      branżowych posiadanymi przez Spółkę;
+                    </li>
+                    <li>
+                      porównanie wolumenów produkcji uwzględniających
+                      perspektywiczność złóż, prognoz cen paliw do raportów
+                      rezerw niezależnych ekspertów Spółki dla aktywów
+                      kanadyjskich i polskich będących podstawą wyceny tych
+                      aktywów;
+                    </li>
+                    <li>
+                      krytyczną analizę metodyki sposobu wyliczenia stóp
+                      dyskonta i poprawności ich kalkulacji;
+                    </li>
+                  </ul>
+                </li>
+                <li>ocenę niezależności i kompetencji ekspertów Spółki;</li>
+                <li>
+                  ocenę poprawności i kompletności ujawnień w sprawozdaniu
+                  finansowym w zakresie ujawnienia kluczowych założeń do testów
+                  oraz analiz wrażliwości.
+                </li>
+              </ul>
+            </td>
+          </tr>
+          <tr class="T1">
+            <td colspan="2" style="font-style: italic">
+              <p>
+                Odzyskiwalność wartości księgowej środków trwałych i wartości
+                niematerialnych
+              </p>
+            </td>
+          </tr>
+          <tr class="T1">
+            <td>
+              <p>
+                Spółka użytkuje istotne rzeczowe aktywa trwałe, wartości
+                niematerialne i aktywa z tytułu praw do użytkowania („aktywa
+                trwałe”) w segmentach Rafineria, Petrochemia, Gaz, Energetyka i
+                Wydobycie o łącznej wartości netto 41 778 mln PLN, w stosunku do
+                których dokonano odpisów aktualizujących z tytułu trwałej utraty
+                wartości.
+              </p>
+            </td>
+            <td>
+              <p>Nasze procedury badania obejmowały w szczególności:</p>
+              <ul class="L1T">
+                <li>
+                  zrozumienie środowiska kontroli wewnętrznej w zakresie procesu
+                  oszacowania podstawy do ujęcia utraty wartości środków
+                  trwałych i wartości niematerialnych, dla których
+                  zidentyfikowano przesłanki do utraty wartości;
+                </li>
+              </ul>
+            </td>
+          </tr>
+        </table>
+      </div>
+      <div class="footer-block2"><p class="PB1">2</p></div>
+    </div>
+    <div class="main-page">
+      <div class="header-block2">
+        <img
+          src="data:image/png; base64,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&#xA;&#xA;"
+          alt="Deloitte-logo"
+          style="width: 54mm; height: 10mm"
+        />
+      </div>
+      <div class="sub-page2">
+        <br />
+        <table class="table1">
+          <tr class="T1">
+            <th><p>Kluczowa sprawa badania</p></th>
+            <th><p>Jak nasze badanie odniosło się do tej sprawy</p></th>
+          </tr>
+          <tr class="T1">
+            <td>
+              <p>
+                Na 31 grudnia 2022 roku Zarząd Spółki dokonał analizy przesłanek
+                pod kątem utraty wartości aktywów trwałych we wszystkich
+                jednostkach generujących przepływy pieniężne Spółki,
+                a w konsekwencji przeprowadził testy na utratę wartości. W
+                wyniku przeprowadzonych testów łączny wpływ odpisów
+                aktualizujących netto na majątek trwały w postaci dodatkowych
+                odpisów wyniósł 3 209 mln PLN. Kwota ta obejmuje głównie
+                zawiązanie odpisów aktualizujących wartość aktywów w segmencie
+                Rafineria w wysokości 2 603 mln PLN (nota 13.4.3) oraz Wydobycie
+                588 mln PLN.
+              </p>
+              <br />
+              <p>
+                Jako kluczowy obszar badania uznaliśmy istotne szacunki Zarządu
+                Spółki przyjęte w modelach zdyskontowanych przepływów
+                pieniężnych, będących podstawą do określenia wartości
+                odzyskiwanej aktywów, a w szczególności kluczowe założenia
+                makroekonomiczne, jak również przyjęte stopy dyskonta.
+              </p>
+            </td>
+            <td>
+              <ul class="L1T">
+                <li>
+                  krytyczną ocenę przyjętych przez Zarząd Spółki kluczowych
+                  założeń i szacunków uwzględniających specyfikę działalności
+                  poszczególnych jednostek generujących przepływy pieniężne, co
+                  do wyliczenia przyszłych oczekiwanych przepływów pieniężnych,
+                  w tym:
+                  <ul class="L1T">
+                    <li>
+                      porównanie przyjętych założeń co do przyszłych przepływów
+                      z zatwierdzonym planem finansowym dla 2023 roku
+                    </li>
+                    <li>
+                      krytyczną analizę wypracowanych przez Zarząd Spółki
+                      kluczowych długoterminowych założeń makroekonomicznych, w
+                      tym prognozowanych cen paliw, marż rafineryjnych
+                      i petrochemicznych, marż produktowych, cen gazu ziemnego,
+                      cen praw do emisji CO2, inflacji, kursów walutowych
+                      przyjętych przez Spółkę oraz powiązania założeń z
+                      raportami niezależnych agencji branżowych posiadanymi
+                      przez Spółkę;
+                    </li>
+                    <li>
+                      ocenę zasadności metodyki przyjmowanej w modelach
+                      dotyczących założeń co do ustalania przepływów pieniężnych
+                      po okresie objętym planem finansowym;
+                    </li>
+                    <li>
+                      krytyczną analizę metodyki sposobu wyliczenia stóp
+                      dyskonta i poprawności ich kalkulacji;
+                    </li>
+                  </ul>
+                </li>
+                <li>
+                  ocenę modeli zdyskontowanych przepływów pieniężnych w zakresie
+                  ich zgodności ze standardami sprawozdawczości finansowej
+                  oraz poprawności matematycznej;
+                </li>
+                <li>
+                  ocenę poprawności i kompletności ujawnień w sprawozdaniu
+                  finansowym w zakresie ujawnienia kluczowych założeń do testów
+                  oraz analiz wrażliwości.
+                </li>
+              </ul>
+            </td>
+          </tr>
+          <tr class="T1">
+            <td colspan="2" style="font-style: italic">
+              <p>
+                Prawidłowość ujęcia przychodów ze sprzedaży ropy oraz sprzedaży
+                petrochemicznej
+              </p>
+            </td>
+          </tr>
+          <tr class="T1">
+            <td>
+              <p>
+                W roku zakończonym 31 grudnia 2022 roku Spółka osiągnęła
+                przychody ze sprzedaży ropy do jednostek powiązanych w wysokości
+                49 671 mln PLN oraz sprzedaży produktów i towarów
+                petrochemicznych w wysokości 9 643 mln PLN (nota 12.2).
+              </p>
+              <br />
+              <p>
+                Jako kluczowy obszar badania uznaliśmy ryzyko, czy przychody z
+                tytułu sprzedaży zostały rozpoznane w prawidłowym okresie
+                sprawozdawczym, czyli zgodnie z momentem wydania produktu bądź
+                towaru oraz przeniesieniem ryzyka i prawa związanego z produktem
+                lub towarem. Ten kluczowy obszar badania identyfikujemy
+                w odniesieniu do transakcji sprzedaży ropy oraz produktów
+                i towarów petrochemicznych ze względu na zaangażowanie w
+                transakcje sprzedaży jednostek powiązanych, złożoność transakcji
+                oraz ich istotność.
+              </p>
+            </td>
+            <td>
+              <p>Nasze procedury badania obejmowały w szczególności:</p>
+              <ul class="L1T">
+                <li>
+                  zrozumienie środowiska kontroli wewnętrznej w zakresie
+                  rozpoznawania przychodów w prawidłowym okresie;
+                </li>
+                <li>
+                  testy skuteczności wybranych kluczowych kontroli wewnętrznych
+                  Spółki w obszarze rozpoznawania przychodów w prawidłowym
+                  okresie;
+                </li>
+                <li>
+                  przegląd najważniejszych umów obowiązujących w badanym okresie
+                  oraz prawidłowość zastosowanych zasad ujmowania przychodu
+                  zgodnie z obowiązującymi standardami sprawozdawczości;
+                </li>
+                <li>
+                  weryfikację na wybranej losowo próbie transakcji z przełomu
+                  roku odrębnie dla każdego strumienia przychodów i niezależną
+                  ocenę prawidłowości ujęcia przychodów na podstawie dokumentów
+                  źródłowych;
+                </li>
+                <li>
+                  procedury analityczne w zakresie oceny korelacji przychodów i
+                  kosztów oraz porównanie rzeczywistych obrotów do niezależnych
+                  oczekiwań na podstawie analizy tendencji oraz czynników
+                  makroekonomicznych;
+                </li>
+                <li>
+                  analizę transakcji nietypowych i korekt przychodów po dniu
+                  bilansowym;
+                </li>
+                <li>
+                  ocenę prawidłowości i kompletności ujawnień w zakresie
+                  przychodów ze sprzedaży w sprawozdaniu finansowym.
+                </li>
+              </ul>
+            </td>
+          </tr>
+        </table>
+      </div>
+      <div class="footer-block2"><p class="PB1">3</p></div>
+    </div>
+    <div class="main-page">
+      <div class="header-block2">
+        <img
+          src="data:image/png; base64,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&#xA;&#xA;"
+          alt="Deloitte-logo"
+          style="width: 54mm; height: 10mm"
+        />
+      </div>
+      <div class="sub-page2">
+        <br />
+        <p class="P2">
+          Odpowiedzialność Zarządu i Rady Nadzorczej za sprawozdanie finansowe
+        </p>
+        <p class="P1">
+          Zarząd Spółki jest odpowiedzialny za sporządzenie, na podstawie
+          prawidłowo prowadzonych ksiąg rachunkowych, sprawozdania finansowego,
+          które przedstawia rzetelny i jasny obraz sytuacji majątkowej i
+          finansowej i wyniku finansowego Spółki zgodnie z mającymi zastosowanie
+          Międzynarodowymi Standardami Sprawozdawczości Finansowej
+          zatwierdzonymi przez Unię Europejską, przyjętymi zasadami (polityką)
+          rachunkowości oraz obowiązującymi Spółkę przepisami prawa i statutem,
+          a także za kontrolę wewnętrzną, którą Zarząd uznaje za niezbędną, aby
+          umożliwić sporządzenie sprawozdania finansowego niezawierającego
+          istotnego zniekształcenia spowodowanego oszustwem lub błędem.
+        </p>
+        <br />
+        <p class="P1">
+          Sporządzając sprawozdanie finansowe Zarząd Spółki jest odpowiedzialny
+          za ocenę zdolności Spółki do kontynuowania działalności, ujawnienie,
+          jeżeli ma to zastosowanie, spraw związanych z kontynuacją działalności
+          oraz za przyjęcie zasady kontynuacji działalności jako podstawy
+          rachunkowości, z wyjątkiem sytuacji kiedy Zarząd albo zamierza dokonać
+          likwidacji Spółki, albo zaniechać prowadzenia działalności, albo nie
+          ma żadnej realnej alternatywy dla likwidacji lub zaniechania
+          działalności.
+        </p>
+        <br />
+        <p class="P1">
+          Zarząd Spółki oraz członkowie Rady Nadzorczej Spółki są zobowiązani do
+          zapewnienia, aby sprawozdanie finansowe spełniało wymagania
+          przewidziane w Ustawie o rachunkowości. Członkowie Rady Nadzorczej są
+          odpowiedzialni za nadzorowanie procesu sprawozdawczości finansowej
+          Spółki.
+        </p>
+        <br />
+        <p class="P2">
+          Odpowiedzialność biegłego rewidenta za badanie sprawozdania
+          finansowego
+        </p>
+        <p class="P1">
+          Naszymi celami są uzyskanie racjonalnej pewności, czy sprawozdanie
+          finansowe jako całość nie zawiera istotnego zniekształcenia
+          spowodowanego oszustwem lub błędem oraz wydanie sprawozdania z badania
+          zawierającego naszą opinię. Racjonalna pewność jest wysokim poziomem
+          pewności, ale nie gwarantuje, że badanie przeprowadzone zgodnie z KSB
+          zawsze wykryje istniejące istotne zniekształcenie. Zniekształcenia
+          mogą powstawać na skutek oszustwa lub błędu i są uważane za istotne,
+          jeżeli można racjonalnie oczekiwać, że pojedynczo lub łącznie mogłyby
+          wpłynąć na decyzje gospodarcze użytkowników podjęte na podstawie tego
+          sprawozdania finansowego.
+        </p>
+        <br />
+        <p class="P1">
+          Zakres badania nie obejmuje zapewnienia co do przyszłej rentowności
+          Spółki ani efektywności lub skuteczności prowadzenia jej spraw przez
+          Zarząd Spółki obecnie lub w przyszłości.
+        </p>
+        <br />
+        <p class="P1">
+          Podczas badania zgodnego z KSB stosujemy zawodowy osąd i zachowujemy
+          zawodowy sceptycyzm, a także:
+        </p>
+        <ul>
+          <li class="L1">
+            identyfikujemy i oceniamy ryzyka istotnego zniekształcenia
+            sprawozdania finansowego spowodowanego oszustwem lub błędem,
+            projektujemy i przeprowadzamy procedury badania odpowiadające tym
+            ryzykom i uzyskujemy dowody badania, które są wystarczające
+            i odpowiednie, aby stanowić podstawę dla naszej opinii. Ryzyko
+            niewykrycia istotnego zniekształcenia wynikającego z oszustwa jest
+            większe niż tego wynikającego z błędu, ponieważ oszustwo może
+            dotyczyć zmowy, fałszerstwa, celowych pominięć, wprowadzenia w błąd
+            lub obejścia kontroli wewnętrznej;
+          </li>
+          <li class="L1">
+            uzyskujemy zrozumienie kontroli wewnętrznej stosownej dla badania w
+            celu zaprojektowania procedur badania, które są odpowiednie w danych
+            okolicznościach, ale nie w celu wyrażenia opinii na temat
+            skuteczności kontroli wewnętrznej Spółki;
+          </li>
+          <li class="L1">
+            oceniamy odpowiedniość zastosowanych zasad (polityki) rachunkowości
+            oraz zasadność szacunków księgowych oraz powiązanych ujawnień
+            dokonanych przez Zarząd Spółki;
+          </li>
+          <li class="L1">
+            wyciągamy wniosek na temat odpowiedniości zastosowania przez Zarząd
+            Spółki zasady kontynuacji działalności jako podstawy rachunkowości
+            oraz, na podstawie uzyskanych dowodów badania, czy istnieje istotna
+            niepewność związana ze zdarzeniami lub warunkami, która może
+            poddawać w znaczącą wątpliwość zdolność Spółki do kontynuacji
+            działalności. Jeżeli dochodzimy do wniosku, że istnieje istotna
+            niepewność, wymagane jest od nas zwrócenie uwagi w naszym
+            sprawozdaniu biegłego rewidenta na powiązane ujawnienia w
+            sprawozdaniu finansowym lub, jeżeli takie ujawnienia są
+            nieadekwatne, modyfikujemy naszą opinię. Nasze wnioski są oparte na
+            dowodach badania uzyskanych do dnia sporządzenia naszego
+            sprawozdania biegłego rewidenta, jednakże przyszłe zdarzenia lub
+            warunki mogą spowodować, że Spółka zaprzestanie kontynuacji
+            działalności;
+          </li>
+          <li class="L1">
+            oceniamy ogólną prezentację, strukturę i zawartość sprawozdania
+            finansowego, w tym ujawnienia oraz czy sprawozdanie finansowe
+            przedstawia będące ich podstawą transakcje i zdarzenia w sposób
+            zapewniający rzetelną prezentację.
+          </li>
+        </ul>
+        <br />
+        <p class="P1">
+          Przekazujemy Radzie Nadzorczej Spółki informacje o, między innymi,
+          planowanym zakresie i czasie przeprowadzenia badania oraz znaczących
+          ustaleniach badania, w tym wszelkich znaczących słabościach kontroli
+          wewnętrznej, które zidentyfikujemy podczas badania.
+        </p>
+      </div>
+      <div class="footer-block2"><p class="PB1">4</p></div>
+    </div>
+    <div class="main-page">
+      <div class="header-block2">
+        <img
+          src="data:image/png; base64,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&#xA;&#xA;"
+          alt="Deloitte-logo"
+          style="width: 54mm; height: 10mm"
+        />
+      </div>
+      <div class="sub-page2">
+        <br />
+        <p class="P1">
+          Składamy Radzie Nadzorczej Spółki oświadczenie, że przestrzegaliśmy
+          stosownych wymogów etycznych dotyczących niezależności oraz, że
+          będziemy informować ją o wszystkich powiązaniach i innych sprawach,
+          które mogłyby być racjonalnie uznane za stanowiące zagrożenie dla
+          naszej niezależności, a tam gdzie ma to zastosowanie, informujemy o
+          zastosowanych zabezpieczeniach.
+        </p>
+        <br />
+        <p class="P1">
+          Spośród spraw przekazywanych Radzie Nadzorczej Spółki ustaliliśmy te
+          sprawy, które były najbardziej znaczące podczas badania sprawozdania
+          finansowego za bieżący rok obrotowy i dlatego uznaliśmy je za kluczowe
+          sprawy badania. Opisujemy te sprawy w naszym sprawozdaniu biegłego
+          rewidenta, chyba że przepisy prawa lub regulacje zabraniają
+          publicznego ich ujawnienia lub gdy, w wyjątkowych okolicznościach,
+          ustalimy, że kwestia nie powinna być przedstawiona w naszym
+          sprawozdaniu, ponieważ można byłoby racjonalnie oczekiwać, że
+          negatywne konsekwencje przeważyłyby korzyści takiej informacji dla
+          interesu publicznego.
+        </p>
+        <br />
+        <p class="P2">Inne informacje, w tym sprawozdanie z działalności</p>
+        <br />
+        <p class="P1">
+          Na inne informacje składa się sprawozdanie z działalności Spółki za
+          rok obrotowy zakończony 31 grudnia 2022 r. („Sprawozdanie z
+          działalności”) wraz z oświadczeniem o stosowaniu ładu korporacyjnego i
+          oświadczeniem na temat informacji niefinansowych, o którym mowa w art.
+          49b ust. 1 Ustawy o rachunkowości, które są wyodrębnionymi częściami
+          tego sprawozdania (razem „Inne informacje”).
+        </p>
+        <br />
+        <p class="P1">
+          Sprawozdanie Zarządu z działalności Grupy ORLEN i PKN ORLEN za 2022
+          rok, zgodnie z art. 55 ust. 2a Ustawy o rachunkowości, zostało
+          sporządzone łącznie.
+        </p>
+        <br />
+        <p class="C1">Odpowiedzialność Zarządu i Rady Nadzorczej</p>
+        <p class="P1">
+          Zarząd Spółki jest odpowiedzialny za sporządzenie Innych informacji
+          zgodnie z przepisami prawa.
+        </p>
+        <br />
+        <p class="P1">
+          Zarząd Spółki oraz członkowie Rady Nadzorczej Spółki są zobowiązani do
+          zapewnienia, aby Sprawozdanie z działalności wraz z wyodrębnionymi
+          częściami spełniało wymagania przewidziane w Ustawie o rachunkowości.
+        </p>
+        <br />
+        <p class="C1">Odpowiedzialność biegłego rewidenta</p>
+        <p class="P1">
+          Nasza opinia z badania sprawozdania finansowego nie obejmuje Innych
+          informacji. W związku z badaniem sprawozdania finansowego naszym
+          obowiązkiem jest zapoznanie się z Innymi informacjami, i czyniąc to,
+          rozpatrzenie, czy Inne informacje nie są istotnie niespójne ze
+          sprawozdaniem finansowym lub naszą wiedzą uzyskaną podczas badania,
+          lub w inny sposób wydają się istotnie zniekształcone. Jeśli na
+          podstawie wykonanej pracy, stwierdzimy istotne zniekształcenia w
+          Innych informacjach, jesteśmy zobowiązani poinformować o tym w naszym
+          sprawozdaniu z badania. Naszym obowiązkiem zgodnie z wymogami Ustawy o
+          biegłych rewidentach jest również wydanie opinii, czy Sprawozdanie z
+          działalności zostało sporządzone zgodnie z przepisami oraz czy jest
+          zgodne z informacjami zawartymi w sprawozdaniu finansowym. Ponadto
+          jesteśmy zobowiązani do poinformowania, czy Spółka sporządziła
+          oświadczenie na temat informacji niefinansowych oraz wydania opinii,
+          czy Spółka w oświadczeniu o stosowaniu ładu korporacyjnego zawarła
+          wymagane informacje.
+        </p>
+        <br />
+        <p class="P2">Opinia o Sprawozdaniu z działalności</p>
+        <p class="P1">
+          Na podstawie wykonanej w trakcie badania pracy, naszym zdaniem,
+          Sprawozdanie z działalności:
+        </p>
+        <ul>
+          <li class="L1">
+            zostało sporządzone zgodnie z art. 49 Ustawy o rachunkowości oraz
+            paragrafem 70 Rozporządzenia Ministra Finansów z dnia 29 marca 2018
+            r. w sprawie informacji bieżących i okresowych przekazywanych przez
+            emitentów papierów wartościowych oraz warunków uznawania za
+            równoważne informacji wymaganych przepisami prawa państwa
+            niebędącego państwem członkowskim („Rozporządzenie o informacjach
+            bieżących” – Dz. U. z 2018 r., poz. 757 z późn. zm.);
+          </li>
+          <li class="L1">
+            jest zgodne z informacjami zawartymi w sprawozdaniu finansowym.
+          </li>
+        </ul>
+        <br />
+        <p class="P1">
+          Ponadto, w świetle wiedzy o Spółce i jej otoczeniu uzyskanej podczas
+          naszego badania oświadczamy, że nie stwierdziliśmy w Sprawozdaniu z
+          działalności istotnych zniekształceń.
+        </p>
+      </div>
+      <div class="footer-block2"><p class="PB1">5</p></div>
+    </div>
+    <div class="main-page">
+      <div class="header-block2">
+        <img
+          src="data:image/png; base64,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&#xA;&#xA;"
+          alt="Deloitte-logo"
+          style="width: 54mm; height: 10mm"
+        />
+      </div>
+      <div class="sub-page2">
+        <br />
+        <p class="P2">Opinia o oświadczeniu o stosowaniu ładu korporacyjnego</p>
+        <p class="P1">
+          Naszym zdaniem w oświadczeniu o stosowaniu ładu korporacyjnego Spółka
+          zawarła wszystkie informacje określone w paragrafie 70 ust. 6 punkt 5
+          Rozporządzenia o informacjach bieżących. Ponadto, naszym zdaniem,
+          informacje wskazane w paragrafie 70 ust. 6 punkt 5 lit. c-f, h oraz
+          lit. i tego Rozporządzenia zawarte w oświadczeniu o stosowaniu ładu
+          korporacyjnego są zgodne z mającymi zastosowanie przepisami oraz
+          informacjami zawartymi w sprawozdaniu finansowym.
+        </p>
+        <br />
+        <p class="P2">Informacja na temat informacji niefinansowych</p>
+        <p class="P1">
+          Zgodnie z wymogami Ustawy o biegłych rewidentach informujemy, że
+          Spółka sporządziła odrębnie sprawozdanie na temat informacji
+          niefinansowych i zamieściła o tym informację w sprawozdaniu z
+          działalności, a także dołączyła to sprawozdanie do rocznego
+          sprawozdania finansowego Spółki. Do dnia sporządzenia niniejszego
+          sprawozdania z badania, Spółka zamieściła sprawozdanie na temat
+          informacji niefinansowych na swojej stronie internetowej.
+        </p>
+        <br />
+        <p class="P1">
+          Nie wykonaliśmy żadnych prac atestacyjnych dotyczących odrębnego
+          sprawozdania na temat informacji niefinansowych i nie wyrażamy
+          jakiegokolwiek zapewnienia na jego temat.
+        </p>
+        <br />
+        <p class="P2">Sprawozdanie na temat innych wymogów prawa i regulacji</p>
+        <br />
+        <p class="P2">
+          Oświadczenie na temat świadczonych usług niebędących badaniem
+          sprawozdań finansowych
+        </p>
+        <p class="P1">
+          Zgodnie z naszą najlepszą wiedzą i przekonaniem oświadczamy, że usługi
+          niebędące badaniem sprawozdań finansowych, które świadczyliśmy na
+          rzecz Spółki i jej spółek zależnych nie są zakazane na mocy art. 5
+          ust. 1 Rozporządzenia UE oraz art. 136 Ustawy o biegłych rewidentach.
+          Usługi niebędące badaniem sprawozdań finansowych, które świadczyliśmy
+          na rzecz Spółki i jej spółek zależnych w badanym okresie zostały
+          wymienione w nocie 8.8.4 Sprawozdania z działalności.
+        </p>
+        <br />
+        <p class="P2">Wybór firmy audytorskiej</p>
+        <p class="P1">
+          Zostaliśmy wybrani do badania sprawozdania finansowego Spółki uchwałą
+          Rady Nadzorczej nr 2699/21 z dnia 29 listopada 2021 roku. Sprawozdania
+          finansowe Spółki badamy nieprzerwanie począwszy od roku obrotowego
+          zakończonego dnia 31 grudnia 2017 roku, to jest przez sześć kolejnych
+          lat obrotowych.
+        </p>
+        <br />
+        <p class="P2">
+          Wymogi prawa energetycznego – regulacyjna informacja finansowa
+        </p>
+        <p class="P1">
+          Przedstawiona w nocie objaśniającej nr 16.2 regulacyjna informacja
+          finansowa, obejmująca pozycje sprawozdania z sytuacji finansowej oraz
+          rachunku zysków i strat sporządzone odrębnie dla poszczególnych
+          rodzajów wykonywanej działalności gospodarczej w zakresie dystrybucji
+          energii elektrycznej oraz obrotu paliwami gazowymi, a także wskazane
+          podstawy sporządzenia tej informacji oraz zasady alokacji aktywów
+          i pasywów oraz kosztów i przychodów do każdej z tych działalności
+          została przygotowana przez Zarząd w celu spełnienia wymogów art. 44
+          ustawy z dnia 10 kwietnia 1997 r. Prawo energetyczne (Dz. U. z 2022 r.
+          poz. 1385 zwanej dalej „Prawem Energetycznym”) (dalej „ustawa”), w tym
+          w zakresie zapewnienia równoprawnego traktowania odbiorców oraz
+          eliminowania subsydiowania skrośnego pomiędzy tymi działalnościami.
+        </p>
+        <br />
+        <p class="P1">
+          Zakres regulacyjnej informacji finansowej określony jest przepisami
+          ustawy. Nasze badanie nie obejmowało oceny wystarczalności informacji
+          wymaganej ustawą z punktu widzenia celu przygotowania tej informacji
+          regulacyjnej, w szczególności w zakresie zapewnienia równoprawnego
+          traktowania odbiorców oraz eliminowania subsydiowania skrośnego
+          pomiędzy tymi działalnościami.
+        </p>
+        <br />
+        <p class="P1">
+          Naszym zdaniem regulacyjna informacja finansowa została sporządzona we
+          wszystkich istotnych aspektach zgodnie z podstawą sporządzenia
+          przedstawioną w nocie 16.2 i spełnia wymogi art. 44 ust. 2 ustawy.
+        </p>
+      </div>
+      <div class="footer-block2"><p class="PB1">6</p></div>
+    </div>
+    <div class="main-page">
+      <div class="header-block2">
+        <img
+          src="data:image/png; base64,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&#xA;&#xA;"
+          alt="Deloitte-logo"
+          style="width: 54mm; height: 10mm"
+        />
+      </div>
+      <div class="sub-page2">
+        <br />
+        <p class="P1">
+          Kluczowym biegłym rewidentem odpowiedzialnym za badanie, którego
+          rezultatem jest niniejsze sprawozdanie niezależnego biegłego
+          rewidenta, jest Artur Maziarka.
+        </p>
+        <br />
+        <p class="P1">
+          Działający w imieniu Deloitte Audyt Spółka z ograniczoną
+          odpowiedzialnością Sp. k. z siedzibą w Warszawie, wpisanej na listę
+          firm audytorskich pod numerem 73, w imieniu której kluczowy biegły
+          rewident zbadał sprawozdanie finansowe:
+        </p>
+        <br /><br /><br /><br />
+        <p class="P1">Artur Maziarka</p>
+        <p class="P1">nr w rejestrze 90108</p>
+        <br /><br />
+        <p class="P1">Warszawa, 27 kwietnia 2023 roku</p>
+      </div>
+      <div class="footer-block2"><p class="PB1">7</p></div>
+    </div>
+  </body>
+</html>

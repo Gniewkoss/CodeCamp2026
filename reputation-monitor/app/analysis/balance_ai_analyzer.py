@@ -219,41 +219,38 @@ def analyze_balance_sheet(
     }
     payload_json = json.dumps(payload, ensure_ascii=False, default=str)
 
-    if not settings.anthropic_api_key:
+    from app.llm import llm_available, llm_complete
+
+    if not llm_available():
         return _heuristic_fallback(payload, figures_by_year, years_covered)
 
-    try:
-        import anthropic
-
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-        msg = client.messages.create(
-            model=settings.anthropic_model,
-            max_tokens=1800,
-            system=_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": payload_json[:18000]}],
-        )
-        raw = "".join(getattr(b, "text", "") or "" for b in msg.content).strip()
-        data = _extract_json(raw)
-        if not data:
-            logger.info("Balance analyzer: non-JSON reply: %s", raw[:300])
-            verdict = _heuristic_fallback(payload, figures_by_year, years_covered)
-            verdict.raw_response = raw
-            verdict.raw_prompt = payload_json[:4000]
-            return verdict
-        verdict = _coerce_verdict(data)
-        verdict.years_covered = years_covered
-        verdict.raw_prompt = payload_json[:4000]
-        verdict.raw_response = raw[:4000]
-        return verdict
-    except Exception as e:
-        logger.warning("Balance analyzer Claude call failed: %s", e)
+    raw = llm_complete(
+        system=_SYSTEM_PROMPT,
+        user=payload_json[:18000],
+        max_tokens=1800,
+        purpose="balance_analyzer",
+    )
+    if not raw:
         verdict = _heuristic_fallback(payload, figures_by_year, years_covered)
         verdict.raw_prompt = payload_json[:4000]
         return verdict
 
+    data = _extract_json(raw)
+    if not data:
+        logger.info("Balance analyzer: non-JSON reply: %s", raw[:300])
+        verdict = _heuristic_fallback(payload, figures_by_year, years_covered)
+        verdict.raw_response = raw
+        verdict.raw_prompt = payload_json[:4000]
+        return verdict
+    verdict = _coerce_verdict(data)
+    verdict.years_covered = years_covered
+    verdict.raw_prompt = payload_json[:4000]
+    verdict.raw_response = raw[:4000]
+    return verdict
+
 
 # ────────────────────────────────────────────────────────────────────────
-# Heuristic fallback used when Claude is unavailable
+# Heuristic fallback used when the LLM is unavailable
 # ────────────────────────────────────────────────────────────────────────
 
 

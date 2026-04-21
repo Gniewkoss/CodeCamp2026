@@ -18,25 +18,41 @@ from app.models import Article, ArticleAnalysis, Company, RiskEvent
 logger = logging.getLogger(__name__)
 
 _SYSTEM = """You are a compliance analyst. Extract concrete risk EVENTS from a news article.
-Return ONLY a JSON array (no markdown). Each item:
+Return ONLY a JSON object with an "events" array (no markdown), shaped like:
 {
-  "event_type": string (must be one of the allowed types),
-  "title": string max 80 chars, Polish,
-  "description": string, Polish, factual,
-  "event_date": "YYYY-MM-DD" or null,
-  "related_person": string full name or null,
-  "severity_modifier": number 0.5-1.5
+  "events": [
+    {
+      "event_type": string (must be one of the allowed types),
+      "title": string max 80 chars, Polish,
+      "description": string, Polish, factual,
+      "event_date": "YYYY-MM-DD" or null,
+      "related_person": string full name or null,
+      "severity_modifier": number 0.5-1.5
+    }
+  ]
 }
-If there is no strong evidence of a distinct event, return []."""
+If there is no strong evidence of a distinct event, return {"events": []}."""
 
 
 def _extract_json_array(raw: str) -> list[dict[str, Any]]:
     raw = raw.strip()
-    m = re.search(r"\[[\s\S]*\]", raw)
-    if not m:
+    # Prefer an object with "events": [...] (new schema)
+    m_obj = re.search(r"\{[\s\S]*\}", raw)
+    if m_obj:
+        try:
+            obj = json.loads(m_obj.group())
+            if isinstance(obj, dict):
+                evs = obj.get("events")
+                if isinstance(evs, list):
+                    return evs
+        except json.JSONDecodeError:
+            pass
+    # Fallback: bare array (legacy prompt)
+    m_arr = re.search(r"\[[\s\S]*\]", raw)
+    if not m_arr:
         return []
     try:
-        data = json.loads(m.group())
+        data = json.loads(m_arr.group())
         return data if isinstance(data, list) else []
     except json.JSONDecodeError:
         return []
@@ -68,24 +84,20 @@ def detect_events_from_article(db: Session, article: Article, analysis: ArticleA
         f"Dozwolone event_type (wybierz dokładnie jeden z listy): {allowed}\n\n"
         f"Artykuł:\n{text}\n"
     )
-    out: list[RiskEvent] = []
-    if not settings.anthropic_api_key:
-        return out
-    try:
-        import anthropic
+    from app.llm import llm_available, llm_complete
 
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-        msg = client.messages.create(
-            model=settings.anthropic_model,
-            max_tokens=min(settings.anthropic_max_tokens, 2000),
-            system=_SYSTEM,
-            messages=[{"role": "user", "content": user}],
-        )
-        raw = "".join(getattr(b, "text", "") or "" for b in msg.content).strip()
-        items = _extract_json_array(raw)
-    except Exception as e:
-        logger.warning("event_detector Claude failed: %s", e)
+    out: list[RiskEvent] = []
+    if not llm_available():
         return out
+    raw = llm_complete(
+        system=_SYSTEM,
+        user=user,
+        max_tokens=min(settings.llm_max_tokens, 2000),
+        purpose="event_detector",
+    )
+    if not raw:
+        return out
+    items = _extract_json_array(raw)
 
     now = datetime.now(timezone.utc)
     for it in items:

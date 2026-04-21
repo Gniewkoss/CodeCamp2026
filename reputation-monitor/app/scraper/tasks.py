@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -25,6 +27,20 @@ from app.services.registry_sync import sync_all_registries
 from app.services.sanctions_sync import apply_sanctions_check
 
 logger = logging.getLogger(__name__)
+
+
+def _as_utc(dt: Optional[datetime]) -> Optional[datetime]:
+    """Return ``dt`` as an offset-aware UTC datetime.
+
+    SQLite strips timezone info on read, so timestamps we persisted as UTC
+    come back naive. Treat any naive datetime as UTC; convert aware ones
+    to UTC. Returns ``None`` for ``None``.
+    """
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
 
 
 def _ensure_article(db: Session, company: Company, raw: RawArticle) -> Optional[Article]:
@@ -176,63 +192,141 @@ def scrape_company_sync(db: Session, company_id: str, *, job: Optional[ScanJob] 
 
     _set_stage(
         db, job, "analyzing",
-        f"Claude analizuje {len(raws)} artykułów (sentyment, red flags, wiarygodność)…",
+        f"Claude analizuje {len(raws)} artykułów równolegle (×{settings.analysis_workers}) — "
+        f"sentyment, red flags, wiarygodność…",
     )
 
     analyzed = 0
     reused = 0
     skipped = 0
     failed = 0
+    deadline_hit = False
     cooldown = timedelta(hours=settings.reanalysis_cooldown_hours)
     now = datetime.now(timezone.utc)
-    for idx, raw in enumerate(raws, start=1):
+
+    # ── Step 1: materialise Article rows + reuse-from-cache decisions ──
+    # We do this serially because SQLAlchemy sessions are not thread-safe,
+    # and DB writes here are cheap (no network). Articles flagged as "fresh"
+    # will be shipped to Claude in parallel below.
+    to_analyse: list[Article] = []
+    for raw in raws:
         art = _ensure_article(db, company, raw)
         if not art:
             skipped += 1
             continue
         art = _enrich_content(db, art)
-        # Skip re-running Claude on articles that were analysed very recently
-        # for the same company — their verdict is still fresh and we'd just
-        # burn credits. We still count them in analyzed so the verdict is
-        # computed over the full evidence base.
         existing = art.analysis
-        title_preview = (art.title or art.url or "")[:80]
+        existing_at = _as_utc(existing.analyzed_at) if existing else None
         if (
             existing is not None
-            and existing.analyzed_at is not None
-            and (now - existing.analyzed_at) < cooldown
+            and existing_at is not None
+            and (now - existing_at) < cooldown
         ):
             analyzed += 1
             reused += 1
-            if job:
-                job.articles_analyzed = analyzed
-                job.stage_detail = f"{idx}/{len(raws)} · cache: {title_preview}"
-                db.commit()
             continue
-        if job:
-            job.stage_detail = f"{idx}/{len(raws)} · Claude analizuje: {title_preview}"
-            db.commit()
-        try:
-            result = analyze_article_with_claude(
-                company_name=company.name,
-                aliases=company.aliases or [],
-                title=art.title,
-                content=art.content,
-                source=art.source,
-                published_at=art.published_at.isoformat() if art.published_at else None,
-            )
-            _persist_analysis(db, art, result)
-            _detect_events_after_analysis(db, art, company)
-            analyzed += 1
-            if job:
-                job.articles_analyzed = analyzed
-                db.commit()
-        except Exception as e:
-            failed += 1
-            logger.exception("Analysis failed for %s: %s", art.url, e)
+        if not (art.content or art.title):
+            skipped += 1
+            continue
+        to_analyse.append(art)
+
+    if job:
+        job.articles_analyzed = analyzed
+        job.stage_detail = (
+            f"cache: {reused} · do analizy: {len(to_analyse)} · "
+            f"workers: {settings.analysis_workers}"
+        )
+        db.commit()
+
+    # ── Step 2: fan out Claude analysis across a thread pool ──
+    # The Anthropic SDK blocks on I/O, so threads are the right tool — we
+    # don't need asyncio and don't need per-thread SQLAlchemy sessions.
+    deadline_at = time.monotonic() + max(30, settings.analysis_deadline_seconds)
+
+    # Snapshot everything Claude needs BEFORE fanning out, so worker threads
+    # never touch the SQLAlchemy session (which isn't thread-safe). We key
+    # back to the Article row on the main thread for persistence.
+    company_name_snap = company.name
+    aliases_snap = list(company.aliases or [])
+    snapshots: list[tuple[Article, dict]] = [
+        (
+            art,
+            {
+                "title": art.title,
+                "content": art.content,
+                "source": art.source,
+                "published_at": art.published_at.isoformat() if art.published_at else None,
+            },
+        )
+        for art in to_analyse
+    ]
+
+    def _run_claude(snap: dict):
+        return analyze_article_with_claude(
+            company_name=company_name_snap,
+            aliases=aliases_snap,
+            title=snap["title"],
+            content=snap["content"],
+            source=snap["source"],
+            published_at=snap["published_at"],
+        )
+
+    if snapshots:
+        workers = max(1, min(settings.analysis_workers, len(snapshots)))
+        total = len(snapshots)
+        done = 0
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="claude") as pool:
+            futures = {pool.submit(_run_claude, snap): art for art, snap in snapshots}
+            try:
+                for fut in as_completed(futures):
+                    art = futures[fut]
+                    done += 1
+                    if time.monotonic() > deadline_at:
+                        # Cancel everything that hasn't started yet and break
+                        # out of the loop. Claude calls already in-flight will
+                        # complete (can't reliably cancel an httpx.post mid-
+                        # roundtrip), but we'll stop waiting on them.
+                        deadline_hit = True
+                        for f2 in futures:
+                            if not f2.done():
+                                f2.cancel()
+                        logger.warning(
+                            "Analysis deadline %ds hit for %s — %d/%d done, rest skipped",
+                            settings.analysis_deadline_seconds, company_id, done, total,
+                        )
+                        break
+                    try:
+                        result = fut.result()
+                    except Exception as e:
+                        failed += 1
+                        logger.warning("Analysis failed for %s: %s", art.url, e)
+                        continue
+                    try:
+                        _persist_analysis(db, art, result)
+                        _detect_events_after_analysis(db, art, company)
+                        analyzed += 1
+                    except Exception as e:
+                        failed += 1
+                        logger.exception("Persist failed for %s: %s", art.url, e)
+                        continue
+                    if job and (done % 3 == 0 or done == total):
+                        job.articles_analyzed = analyzed
+                        job.stage_detail = (
+                            f"{done}/{total} · Claude ×{workers} · ok={analyzed} "
+                            f"err={failed}"
+                        )
+                        try:
+                            db.commit()
+                        except Exception:
+                            db.rollback()
+            finally:
+                # Don't wait for stragglers past the deadline.
+                pool.shutdown(wait=not deadline_hit, cancel_futures=True)
+
     logger.info(
-        "Scan %s: %d sources, %d analysed (%d reused from cooldown, %d failed, %d skipped)",
+        "Scan %s: %d sources, %d analysed (%d reused, %d failed, %d skipped%s)",
         company_id, len(raws), analyzed, reused, failed, skipped,
+        ", DEADLINE HIT" if deadline_hit else "",
     )
 
     _set_stage(db, job, "events", "Sprawdzam sankcje UE/OFAC i listę konsolidowaną MSW…")
@@ -305,14 +399,34 @@ def scrape_company_sync(db: Session, company_id: str, *, job: Optional[ScanJob] 
     except Exception as e:
         logger.warning("Synth failed for %s: %s", company_id, e)
 
+    # Count analyses actually present in the DB for this company — this is
+    # the number the UI should trust even if our in-memory ``analyzed`` drift
+    # (rollbacks, commits in other transactions, etc.) lost a few increments.
+    try:
+        from sqlalchemy import func
+
+        db_analyzed = int(
+            db.scalar(
+                select(func.count(ArticleAnalysis.id))
+                .join(Article, ArticleAnalysis.article_id == Article.id)
+                .where(Article.company_id == company_id)
+            )
+            or 0
+        )
+    except Exception:
+        db_analyzed = analyzed
+
+    reported_analyzed = max(analyzed, db_analyzed)
+
     if job:
         job.status = "done"
         job.stage = "done"
         job.stage_detail = None
         job.finished_at = datetime.now(timezone.utc)
+        job.articles_analyzed = reported_analyzed
         verdict_status = (snap.score_components or {}).get("status") if snap else None
-        fresh = analyzed - reused
-        if verdict_status == "insufficient_evidence":
+        fresh = max(0, analyzed - reused)
+        if verdict_status == "insufficient_evidence" and reported_analyzed == 0:
             job.message = (
                 f"Brak wiarygodnych dowodów — zebrano {len(raws)} artykułów z sieci, "
                 f"żaden nie dotyczył spółki. Dodaj aliasy nazwy lub NIP i ponów skan."
@@ -320,7 +434,7 @@ def scrape_company_sync(db: Session, company_id: str, *, job: Optional[ScanJob] 
         else:
             parts = [
                 f"Zebrano z sieci: {len(raws)}",
-                f"zapisanych w bazie: {analyzed}",
+                f"przeanalizowanych: {reported_analyzed}",
             ]
             if reused:
                 parts.append(f"{reused} z cache ({settings.reanalysis_cooldown_hours}h)")
@@ -330,10 +444,14 @@ def scrape_company_sync(db: Session, company_id: str, *, job: Optional[ScanJob] 
                 parts.append(f"{failed} błędów Claude")
             if skipped:
                 parts.append(f"{skipped} duplikatów URL")
+            if deadline_hit:
+                parts.append(
+                    f"deadline {settings.analysis_deadline_seconds}s — reszta pominięta"
+                )
             job.message = " · ".join(parts) + "."
         db.commit()
 
-    return {"sources_found": len(raws), "articles_analyzed": analyzed}
+    return {"sources_found": len(raws), "articles_analyzed": reported_analyzed}
 
 
 def synthesize_and_persist_insights(db: Session, company_id: str) -> None:

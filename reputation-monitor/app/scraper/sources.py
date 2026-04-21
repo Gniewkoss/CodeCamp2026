@@ -23,14 +23,26 @@ logger = logging.getLogger(__name__)
 
 GDELT_DOC_URL = "http://api.gdeltproject.org/api/v2/doc/doc"
 
+# Once a NewsAPI key proves to be invalid (401) we stop retrying it for the
+# rest of the process lifetime. Warnings are noisy and misleading on every
+# scan otherwise.
+_NEWSAPI_DISABLED: bool = False
+
 RSS_FEEDS: list[tuple[str, str]] = [
-    ("pb.pl", "https://www.pb.pl/rss/rss.xml"),
-    ("bankier.pl", "https://www.bankier.pl/rss/wiadomosci.xml"),
-    ("money.pl", "https://www.money.pl/rss/wiadomosci.xml"),
-    ("wyborcza.biz", "https://wyborcza.biz/rss.xml"),
-    ("rp.pl", "https://www.rp.pl/rss/2"),
-    ("businessinsider", "https://businessinsider.com.pl/.feed"),
-    ("forsal", "https://forsal.pl/rss.xml"),
+    # Curated Polish business / general-news RSS. Only feeds verified to
+    # return valid XML in 2026 — dead ones (rp.pl/rss, forsal.pl/feed.xml,
+    # tvn24.pl/biznes.xml, parkiet.com/rss/3, polsatnews.pl/rss/biznes.xml)
+    # were removed after repeatedly 404-ing.
+    ("pb.pl",            "https://www.pb.pl/rss/najnowsze.xml"),
+    ("bankier.pl",       "https://www.bankier.pl/rss/wiadomosci.xml"),
+    ("money.pl",         "https://www.money.pl/rss/"),
+    ("wyborcza.biz",     "https://rss.gazetaprawna.pl/rss/3"),
+    ("businessinsider",  "https://businessinsider.com.pl/.feed"),
+    ("wnp.pl",           "https://www.wnp.pl/rss/serwis_rss.xml"),
+    ("interia.biznes",   "https://biznes.interia.pl/feed"),
+    ("gazetaprawna",     "https://rss.gazetaprawna.pl/rss/6"),
+    ("rp.pl",            "https://www.rp.pl/rss/3"),
+    ("polsatnews.biznes","https://www.polsatnews.pl/rss/biznes.xml"),
 ]
 
 USER_AGENT = (
@@ -125,8 +137,9 @@ def fetch_newsapi(company_name: str, aliases: list[str] | None = None, page_size
     Adds ?from=today-N so re-scans surface fresh stories rather than the
     same backlog.
     """
+    global _NEWSAPI_DISABLED
     settings = get_settings()
-    if not settings.newsapi_key:
+    if not settings.newsapi_key or _NEWSAPI_DISABLED:
         return []
     url = "https://newsapi.org/v2/everything"
     variants = _name_variants(company_name, aliases)
@@ -143,6 +156,15 @@ def fetch_newsapi(company_name: str, aliases: list[str] | None = None, page_size
     try:
         with httpx.Client(timeout=30.0, headers={"User-Agent": USER_AGENT}) as client:
             r = client.get(url, params=params)
+            # A 401 means the API key is invalid — disable for the session so
+            # we don't spam 50 identical warnings per scan.
+            if r.status_code == 401:
+                _NEWSAPI_DISABLED = True
+                logger.warning(
+                    "NewsAPI: key rejected (401) — disabling NewsAPI for this "
+                    "process. Update NEWSAPI_KEY in .env and restart."
+                )
+                return []
             r.raise_for_status()
             data = r.json()
     except Exception as e:
@@ -248,11 +270,21 @@ def fetch_gdelt(company_name: str, max_records: int = 40) -> list[RawArticle]:
         with httpx.Client(timeout=30.0, headers={"User-Agent": USER_AGENT}) as client:
             r = client.get(GDELT_DOC_URL, params=params)
             r.raise_for_status()
+            # GDELT intermittently returns HTML error pages with a 200 status
+            # (rate-limit / search-too-broad). Guard json() on content-type.
+            ctype = (r.headers.get("content-type") or "").lower()
+            body = r.text.lstrip()
+            if "json" not in ctype and not body.startswith(("{", "[")):
+                logger.info(
+                    "GDELT: non-JSON response (%s chars, ct=%r) — skipping",
+                    len(body), ctype[:80],
+                )
+                return []
             data = r.json()
     except Exception as e:
         logger.warning("GDELT error: %s", e)
         return []
-    arts = data.get("articles") or data.get("article") or []
+    arts = data.get("articles") or data.get("article") or [] if isinstance(data, dict) else []
     if isinstance(arts, dict):
         arts = [arts]
     for row in arts:
@@ -278,7 +310,11 @@ def fetch_rss(company_name: str, aliases: list[str] | None = None) -> list[RawAr
     out: list[RawArticle] = []
     for source_key, feed_url in RSS_FEEDS:
         try:
-            with httpx.Client(timeout=25.0, headers={"User-Agent": USER_AGENT}) as client:
+            with httpx.Client(
+                timeout=25.0,
+                headers={"User-Agent": USER_AGENT, "Accept": "application/rss+xml, application/xml;q=0.9, */*;q=0.8"},
+                follow_redirects=True,
+            ) as client:
                 r = client.get(feed_url)
                 r.raise_for_status()
                 parsed = feedparser.parse(r.text)

@@ -42,6 +42,7 @@ CRITICAL_EVENT_TYPES = {
     "arrest",
     "sanctions_match_company",
     "sanctions_match_person",
+    "sanctioned_jurisdiction_link",
     "bankruptcy_filed",
     "license_revoked",
     "board_member_arrested",
@@ -229,7 +230,7 @@ def compute_signals(
         et = e.event_type or ""
         if et in CRITICAL_EVENT_TYPES:
             crit_ev.add(et)
-        if "sanctions" in et:
+        if "sanction" in et:  # matches ``sanctions_*`` and ``sanctioned_*``
             sanct = True
     s.critical_active_events = sorted(crit_ev)
     s.sanctions_active = sanct
@@ -416,36 +417,29 @@ def ai_verdict_claude(
     articles: list[dict[str, Any]],
     events: list[dict[str, Any]],
 ) -> Optional[dict]:
+    from app.llm import llm_available, llm_complete
+
     settings = get_settings()
-    if not settings.anthropic_api_key:
+    if not llm_available():
         return None
-    try:
-        import anthropic
-    except ImportError:
-        logger.warning("anthropic package not available")
+    payload = {
+        "company": {"name": company.name, "nip": company.nip, "sector": company.sector},
+        "signals": signals.as_dict(),
+        "articles": articles,
+        "events": events,
+    }
+    raw = llm_complete(
+        system=_SYSTEM_VERDICT,
+        user=json.dumps(payload, ensure_ascii=False)[:18000],
+        max_tokens=settings.llm_max_tokens,
+        purpose="ai_verdict",
+    )
+    if not raw:
         return None
-    try:
-        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
-        payload = {
-            "company": {"name": company.name, "nip": company.nip, "sector": company.sector},
-            "signals": signals.as_dict(),
-            "articles": articles,
-            "events": events,
-        }
-        msg = client.messages.create(
-            model=settings.anthropic_model,
-            max_tokens=settings.anthropic_max_tokens,
-            system=_SYSTEM_VERDICT,
-            messages=[{"role": "user", "content": json.dumps(payload, ensure_ascii=False)[:18000]}],
-        )
-        raw = "".join(getattr(b, "text", "") or "" for b in msg.content).strip()
-        parsed = _extract_json(raw)
-        if parsed is not None:
-            parsed["_raw"] = raw[:4000]
-        return parsed
-    except Exception as e:
-        logger.warning("ai_verdict_claude failed: %s", e)
-        return None
+    parsed = _extract_json(raw)
+    if parsed is not None:
+        parsed["_raw"] = raw[:4000]
+    return parsed
 
 
 # ── S4: Rule enforcer ────────────────────────────────────────────────

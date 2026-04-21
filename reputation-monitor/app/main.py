@@ -8,10 +8,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from datetime import datetime, timezone
+
+from sqlalchemy import update
+
 from app.api.finance_routes import router as finance_router
 from app.api.risk_routes import router as risk_router
 from app.api.routes import router
-from app.database import init_db
+from app.database import SessionLocal, init_db
+from app.models import ScanJob
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -37,6 +42,31 @@ app.include_router(finance_router)
 @app.on_event("startup")
 def _startup() -> None:
     init_db()
+    # If the server was killed mid-scan, ScanJob rows are left in ``running``
+    # forever and the UI shows "0 articles" from a stuck job. Flip them to
+    # ``error`` on startup so the next scan can take over cleanly.
+    db = SessionLocal()
+    try:
+        now = datetime.now(timezone.utc)
+        res = db.execute(
+            update(ScanJob)
+            .where(ScanJob.status == "running")
+            .values(
+                status="error",
+                message="Skan przerwany przez restart serwera. Uruchom ponownie.",
+                finished_at=now,
+            )
+        )
+        if res.rowcount:
+            logging.getLogger(__name__).info(
+                "Marked %d stale running scan(s) as error on startup.", res.rowcount
+            )
+        db.commit()
+    except Exception as exc:  # noqa: BLE001
+        logging.getLogger(__name__).warning("Startup scan-job sweep failed: %s", exc)
+        db.rollback()
+    finally:
+        db.close()
 
 
 @app.get("/health")
