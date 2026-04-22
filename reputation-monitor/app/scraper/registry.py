@@ -3,10 +3,10 @@
 1. **MF white-list** (Wykaz podatników VAT) — `wl-api.mf.gov.pl`
    Public, no auth. NIP, REGON, KRS, VAT status, address, bank accounts.
 
-2. **GUS BIR REGON** (`wyszukiwarkaregon.stat.gov.pl`) — SOAP.
-   Uses GUS's published public test key by default; override via
-   GUS_BIR_API_KEY + GUS_BIR_API_URL for production data. Gives PKD,
-   legal form, registration date, parent unit, etc.
+2. **GUS BIR REGON** — SOAP (prod: `wyszukiwarkaregon.stat.gov.pl/wsBIR/...`, test: `wyszukiwarkaregontest...`).
+   Set ``GUS_BIR_API_KEY`` in ``.env`` and ``GUS_BIR_ENABLED=true``. Returns PKD
+   (BIR11OsPrawnaPkd), forma prawna, adres, oraz pełny raport BIR11 (np.
+   BIR11OsPrawna) w ``raw.gus_bir_full`` dla analizy DD.
 
 3. **CEIDG v3** (`dane.biznes.gov.pl/api/ceidg/v3`) — REST + JWT.
    The only canonical source for sole traders (JDG) — opt-in via
@@ -31,6 +31,7 @@ import httpx
 from lxml import etree
 
 from app.config import get_settings
+from app.models import Company
 from app.scraper.krs_client import fetch_krs_odpis_json
 
 logger = logging.getLogger(__name__)
@@ -78,6 +79,56 @@ class RegistryRecord:
         for k, v in (other.raw or {}).items():
             self.raw.setdefault(k, v)
         return self
+
+
+def apply_registry_record(company: Company, rec: RegistryRecord) -> None:
+    """Fill empty ``Company`` fields from a registry hit (non-destructive).
+
+    Used by quick-lookup and by ``sync_gus_bir_for_company`` so MF / GUS / KRS
+    enrichment follows one code path.
+    """
+    if rec.name and not company.name:
+        company.name = rec.name
+    if rec.nip and not company.nip:
+        company.nip = rec.nip
+    if rec.regon and not company.regon:
+        company.regon = rec.regon
+    if rec.krs and not company.krs:
+        company.krs = rec.krs
+    if rec.legal_form and not company.legal_form:
+        company.legal_form = rec.legal_form
+    if rec.status_vat:
+        company.status_vat = rec.status_vat
+    if rec.address and not company.address:
+        company.address = rec.address
+    if rec.registration_date and not company.registration_date:
+        company.registration_date = rec.registration_date
+    if rec.pkd_primary and not company.pkd_primary:
+        company.pkd_primary = rec.pkd_primary
+    if rec.pkd_primary_label and not company.pkd_primary_label:
+        company.pkd_primary_label = rec.pkd_primary_label
+    if rec.pkd_all and not company.pkd_all:
+        company.pkd_all = rec.pkd_all
+    if rec.pkd_primary_label and not company.sector:
+        company.sector = rec.pkd_primary_label[:128]
+    existing_srcs = list(company.registry_sources or [])
+    for s in rec.sources or []:
+        if s not in existing_srcs:
+            existing_srcs.append(s)
+    if existing_srcs:
+        company.registry_sources = existing_srcs
+    meta = dict(company.registry_meta or {})
+    for k, v in (rec.raw or {}).items():
+        meta.setdefault(k, v)
+    if meta:
+        company.registry_meta = meta
+    if rec.name:
+        existing_aliases = list(company.aliases or [])
+        for a in guess_aliases_from_name(rec.name):
+            if a and a not in existing_aliases:
+                existing_aliases.append(a)
+        if existing_aliases:
+            company.aliases = existing_aliases
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -369,7 +420,12 @@ def gus_lookup(*, nip: Optional[str] = None, regon: Optional[str] = None, krs: O
             summary.get("Miejscowosc") or "",
         ]
         address = ", ".join(p for p in address_parts if p) or None
-        reg_date = summary.get("DataZakonczeniaDzialalnosci") or None  # only when closed
+        # Activity / incorporation dates — prefer "start" over "end" fields.
+        reg_date = (
+            summary.get("DataRozpoczeciaDzialalnosci")
+            or summary.get("DataPowstania")
+            or summary.get("DataZakonczeniaDzialalnosci")
+        ) or None
 
         # Pick correct full report for PKD list
         if typ == "P":
@@ -380,12 +436,30 @@ def gus_lookup(*, nip: Optional[str] = None, regon: Optional[str] = None, krs: O
             report = "BIR11OsPrawnaPkd"
         pkds = _gus_pkd_list(url, sid, out_regon, report) if out_regon else []
 
+        # Full entity report (PKD + search are not enough for DD — adds dates, lokalne jednostki context)
+        gus_full: dict[str, str] = {}
+        if out_regon and typ == "P":
+            gus_full = _gus_full_report(url, sid, out_regon, "BIR11OsPrawna")
+        elif out_regon and typ == "F":
+            gus_full = _gus_full_report(url, sid, out_regon, "BIR11OsFizycznaDaneOgolne")
+        if gus_full and not reg_date:
+            reg_date = (
+                gus_full.get("praw_dataRozpoczeciaDzialalnosci")
+                or gus_full.get("praw_dataPowstania")
+                or gus_full.get("fiz_dataRozpoczeciaDzialalnosci")
+                or gus_full.get("fiz_dataPowstania")
+            )
+
         # Primary PKD
         primary = next((p for p in pkds if p.get("primary")), pkds[0] if pkds else None)
 
         legal_form = _LEGAL_FORM_LABELS.get((legal_form_raw or "").upper().strip(), legal_form_raw or None)
         if not legal_form and silos == "1":
             legal_form = "Jednoosobowa działalność gospodarcza"
+
+        raw_gus: dict[str, Any] = {"gus_bir": summary}
+        if gus_full:
+            raw_gus["gus_bir_full"] = gus_full
 
         return RegistryRecord(
             name=name,
@@ -399,7 +473,7 @@ def gus_lookup(*, nip: Optional[str] = None, regon: Optional[str] = None, krs: O
             pkd_primary_label=primary.get("label") if primary else None,
             pkd_all=pkds or [],
             sources=["GUS_BIR"],
-            raw={"gus_bir": summary},
+            raw=raw_gus,
         )
     finally:
         try:

@@ -11,7 +11,9 @@ from sqlalchemy.orm import Session
 
 from app.analysis.board_resolver import resolve_board
 from app.models import Company, CompanyPerson, CompanyRegistryData
+from app.config import get_settings
 from app.scraper.ceidg_v2 import fetch_ceidg_firma_v2
+from app.scraper.registry import apply_registry_record, gus_lookup
 from app.scraper.krs_client import (
     PersonSignature,
     extract_krs_highlights,
@@ -289,9 +291,36 @@ def sync_ceidg_v2_for_company(db: Session, company_id: str) -> dict[str, Any]:
     return {"ok": True}
 
 
+def sync_gus_bir_for_company(db: Session, company_id: str) -> dict[str, Any]:
+    """REGON / GUS BIR — PKD, forma prawna, pełniejszy adres, raport BIR11 (prod)."""
+    settings = get_settings()
+    if not settings.gus_bir_enabled or not (settings.gus_bir_api_key or "").strip():
+        return {"ok": False, "skipped": True, "reason": "GUS_BIR disabled or no GUS_BIR_API_KEY"}
+
+    company = db.get(Company, company_id)
+    if not company:
+        return {"ok": False, "error": "no company"}
+    if not (company.nip or company.regon or company.krs):
+        return {"ok": False, "skipped": True, "reason": "no nip/regon/krs for GUS lookup"}
+
+    rec = gus_lookup(
+        nip=company.nip,
+        regon=company.regon,
+        krs=company.krs,
+    )
+    if not rec:
+        return {"ok": False, "error": "GUS BIR returned no data (check NIP/REGON or key)"}
+
+    apply_registry_record(company, rec)
+    _add_registry_row(db, company_id, "GUS_BIR", rec.raw or {"gus": True})
+    db.commit()
+    return {"ok": True, "sources": rec.sources, "name": rec.name, "pkd": rec.pkd_primary}
+
+
 def sync_all_registries(db: Session, company_id: str) -> dict[str, Any]:
     out: dict[str, Any] = {}
     if db.get(Company, company_id):
         out["krs"] = sync_krs_for_company(db, company_id)
+        out["gus_bir"] = sync_gus_bir_for_company(db, company_id)
         out["ceidg_v2"] = sync_ceidg_v2_for_company(db, company_id)
     return out

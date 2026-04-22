@@ -198,10 +198,6 @@ class CompanyPerson(Base):
     start_date: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     end_date: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     is_active: Mapped[bool] = mapped_column(default=True)
-    # KRS | CEIDG_V2 | claude_knowledge | manual
-    source: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, default="KRS")
-    confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # 0..1, for AI-derived rows
-    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     company: Mapped["Company"] = relationship(back_populates="persons")
 
@@ -500,7 +496,8 @@ class PersonRiskFlag(Base):
     person_id: Mapped[str] = mapped_column(
         String(36), ForeignKey("company_persons.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    # past_bankruptcy | past_liquidation | active_liquidation | disqualification | news_scandal | other
+    # past_bankruptcy | past_liquidation | active_liquidation | disqualification |
+    # news_scandal | foreign_adversary_exposure | other
     kind: Mapped[str] = mapped_column(String(32), nullable=False)
     other_company_krs: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     other_company_name: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)

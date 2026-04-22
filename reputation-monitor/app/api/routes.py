@@ -24,6 +24,7 @@ from app.scoring.calculator import (
 from app.analysis.claude_analyzer import resolve_company_identity
 from app.scraper.registry import (
     RegistryRecord,
+    apply_registry_record,
     guess_aliases_from_name,
     lookup_krs,
     lookup_nip,
@@ -297,60 +298,13 @@ def create_company(payload: CompanyIn, db: Session = Depends(get_db)) -> Company
         try:
             rec = lookup_nip(c.nip)
             if rec:
-                _apply_registry(c, rec)
+                apply_registry_record(c, rec)
                 db.commit()
                 db.refresh(c)
         except Exception:
             pass
 
     return _company_detail(db, c)
-
-
-def _apply_registry(company: Company, rec: RegistryRecord) -> None:
-    if rec.name and not company.name:
-        company.name = rec.name
-    if rec.nip and not company.nip:
-        company.nip = rec.nip
-    if rec.regon and not company.regon:
-        company.regon = rec.regon
-    if rec.krs and not company.krs:
-        company.krs = rec.krs
-    if rec.legal_form and not company.legal_form:
-        company.legal_form = rec.legal_form
-    if rec.status_vat:
-        company.status_vat = rec.status_vat
-    if rec.address and not company.address:
-        company.address = rec.address
-    if rec.registration_date and not company.registration_date:
-        company.registration_date = rec.registration_date
-    if rec.pkd_primary and not company.pkd_primary:
-        company.pkd_primary = rec.pkd_primary
-    if rec.pkd_primary_label and not company.pkd_primary_label:
-        company.pkd_primary_label = rec.pkd_primary_label
-    if rec.pkd_all and not company.pkd_all:
-        company.pkd_all = rec.pkd_all
-    # Auto-fill sector from PKD label if missing — helps Claude's SWOT step.
-    if rec.pkd_primary_label and not company.sector:
-        company.sector = rec.pkd_primary_label[:128]
-    # Registry sources — merge, preserving order
-    existing_srcs = list(company.registry_sources or [])
-    for s in rec.sources or []:
-        if s not in existing_srcs:
-            existing_srcs.append(s)
-    if existing_srcs:
-        company.registry_sources = existing_srcs
-    meta = dict(company.registry_meta or {})
-    for k, v in (rec.raw or {}).items():
-        meta.setdefault(k, v)
-    if meta:
-        company.registry_meta = meta
-    if rec.name:
-        existing_aliases = list(company.aliases or [])
-        for a in guess_aliases_from_name(rec.name):
-            if a and a not in existing_aliases:
-                existing_aliases.append(a)
-        if existing_aliases:
-            company.aliases = existing_aliases
 
 
 _IDENT_PREFIX_RE = re.compile(r"^\s*(?:nip|krs|regon)\s*[:=]?\s*", re.IGNORECASE)
@@ -529,7 +483,7 @@ def quick_lookup(
             existing.sector = ai_identity.sector
 
     if rec:
-        _apply_registry(existing, rec)
+        apply_registry_record(existing, rec)
 
     db.commit()
     db.refresh(existing)

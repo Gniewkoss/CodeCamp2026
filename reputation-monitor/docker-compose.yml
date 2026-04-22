@@ -11,7 +11,7 @@ services:
       NEWSAPI_KEY: ${NEWSAPI_KEY:-}
       GDELT_ENABLED: ${GDELT_ENABLED:-true}
       MAX_ARTICLES_PER_SCAN: ${MAX_ARTICLES_PER_SCAN:-25}
-      GUS_BIR_API_URL: ${GUS_BIR_API_URL:-https://wyszukiwarkaregontest.stat.gov.pl/wsBIR/UslugaBIRzewnPubl.svc}
+      GUS_BIR_API_URL: ${GUS_BIR_API_URL:-https://wyszukiwarkaregon.stat.gov.pl/wsBIR/UslugaBIRzewnPubl.svc}
       GUS_BIR_API_KEY: ${GUS_BIR_API_KEY:-}
       GUS_BIR_ENABLED: ${GUS_BIR_ENABLED:-false}
       CEIDG_API_URL: ${CEIDG_API_URL:-https://dane.biznes.gov.pl/api/ceidg/v3}

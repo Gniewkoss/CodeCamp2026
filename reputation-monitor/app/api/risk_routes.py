@@ -15,7 +15,12 @@ from app.database import get_db
 from app.models import Company, CompanyPerson, CompanyRegistryData, RiskEvent
 from app.scoring.calculator import latest_score_for_company, recalculate_and_persist, score_history_series
 from app.scoring.event_lifecycle import calculate_company_score, get_event_risk_contribution
-from app.services.registry_sync import sync_all_registries, sync_ceidg_v2_for_company, sync_krs_for_company
+from app.services.registry_sync import (
+    sync_all_registries,
+    sync_ceidg_v2_for_company,
+    sync_gus_bir_for_company,
+    sync_krs_for_company,
+)
 from app.services.sanctions_sync import apply_sanctions_check
 
 router = APIRouter()
@@ -222,6 +227,14 @@ def refresh_ceidg_only(company_id: str, db: Session = Depends(get_db)) -> Dict[s
     if not db.get(Company, company_id):
         raise HTTPException(status_code=404, detail="Company not found")
     return sync_ceidg_v2_for_company(db, company_id)
+
+
+@router.post("/api/companies/{company_id}/registry/gus")
+def refresh_gus_bir(company_id: str, db: Session = Depends(get_db)) -> Dict[str, Any]:
+    """Pobierz dane z GUS BIR/REGON (produkcja) — PKD, forma, BIR11."""
+    if not db.get(Company, company_id):
+        raise HTTPException(status_code=404, detail="Company not found")
+    return sync_gus_bir_for_company(db, company_id)
 
 
 @router.post("/api/companies/{company_id}/sanctions/recheck")
