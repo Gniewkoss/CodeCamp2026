@@ -11,6 +11,14 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite:///./repmonitor.db"
 
+    # LLM routing — see ``app/llm.py`` (unified OpenAI + Anthropic).
+    # LLM_PROVIDER: anthropic | openai
+    llm_provider: str = "anthropic"
+    openai_api_key: Optional[str] = None
+    openai_model: str = "gpt-4o"
+    # Default cap for app.analysis.* calls; ``llm_complete`` also falls back to anthropic_max_tokens.
+    llm_max_tokens: int = 2200
+
     # Anthropic Claude — core of the analysis engine.
     anthropic_api_key: Optional[str] = None
     anthropic_model: str = "claude-sonnet-4-5"

@@ -5,6 +5,10 @@ services:
       # Inside the container always use the persistent volume path — the
       # host-side DATABASE_URL from .env is ignored on purpose.
       DATABASE_URL: sqlite:////data/repmonitor.db
+      LLM_PROVIDER: ${LLM_PROVIDER:-anthropic}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
+      LLM_MAX_TOKENS: ${LLM_MAX_TOKENS:-2200}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-5}
       ANTHROPIC_MAX_TOKENS: ${ANTHROPIC_MAX_TOKENS:-1600}
